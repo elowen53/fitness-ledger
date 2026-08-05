@@ -32,7 +32,7 @@ $CatalogPath = Join-Path $ProjectRoot "catalog\exercises.json"
 $WorkoutRoot = Join-Path $ProjectRoot "data\workouts"
 
 $VariantWords = @(
-    @{ Field = "angle"; Value = "incline"; Pattern = "上斜|上倾|incline|inclined" },
+    @{ Field = "angle"; Value = "incline"; Pattern = "坐姿仰卧|上斜|上倾|incline|inclined" },
     @{ Field = "angle"; Value = "decline"; Pattern = "下斜|下倾|decline|declined" },
     @{ Field = "angle"; Value = "flat"; Pattern = "平板|水平|flat" },
     @{ Field = "angle"; Value = "vertical"; Pattern = "垂直|vertical" },
@@ -75,6 +75,7 @@ function Get-EquipmentType([string]$Name, [string]$CatalogType) {
     if ($Name -match "哑铃|dumbbell") { return "dumbbell" }
     if ($Name -match "杠铃|barbell") { return "barbell" }
     if ($Name -match "绳索|钢线|龙门架|拉力器|cable") { return "cable" }
+    if ($Name -match "豪斯特|hoist") { return "machine" }
     if ($Name -match "器械|机器|推胸机|腿举机|machine") { return "machine" }
     if ($Name -match "自重|bodyweight") { return "bodyweight" }
     if ($CatalogType -in @("machine", "barbell", "dumbbell", "cable")) { return $CatalogType }

@@ -178,7 +178,7 @@
       "equipment_type": "free_weight_or_cable_or_machine",
       "aliases": ["肱二头弯举", "二头弯举", "弯举", "biceps curl", "curl"],
       "supported_variants": {
-        "angle": [],
+        "angle": ["incline"],
         "posture": ["standing", "seated", "lying"],
         "laterality": ["bilateral", "unilateral", "alternating"]
       }
@@ -193,6 +193,32 @@
       "supported_variants": {
         "angle": ["vertical"],
         "posture": ["standing"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "overhead_triceps_extension",
+      "canonical_name": "过顶肱三头伸展",
+      "movement_pattern": "elbow_extension",
+      "primary_muscles": ["triceps"],
+      "equipment_type": "free_weight_or_cable",
+      "aliases": ["龙门架钢线过顶俯身臂屈伸", "单手哑铃过顶臂屈伸"],
+      "supported_variants": {
+        "angle": ["vertical"],
+        "posture": ["standing", "seated"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "machine_triceps_pressdown",
+      "canonical_name": "坐姿器械肱三头下压",
+      "movement_pattern": "elbow_extension",
+      "primary_muscles": ["triceps"],
+      "equipment_type": "machine",
+      "aliases": ["豪斯特器械臂屈伸"],
+      "supported_variants": {
+        "angle": ["vertical"],
+        "posture": ["seated"],
         "laterality": ["bilateral", "unilateral"]
       }
     },
