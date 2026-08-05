@@ -40,6 +40,14 @@
 - `equipment.type` 保存 `machine / cable / barbell / dumbbell / bodyweight` 等可比较的器械大类。
 - `equipment.name` 不做全局枚举，因为同一器械在不同健身房可能有不同标识。
 
+## 动作身份与长期对齐
+
+- `exercise_id` 是同一基本动作跨日期、跨叫法保持不变的唯一身份；`reported_name` 是用户当次原话，不承担唯一性。
+- 新记录写入前，解析器同时匹配词典规范名/别名和历史 `reported_name`。命中历史叫法时仍返回原 `exercise_id`，但不会因此自动污染全局别名。
+- 名称不同但存在合理的同动作候选时，需要用户确认对齐；确认无法归入已有动作后才创建新 ID。
+- 默认趋势键为 `exercise_id + variant.angle + variant.posture + variant.laterality + variant.grip + equipment.type + equipment.name + sequence`。其中 `sequence` 表示本次训练内的顺序角色；不同趋势键不直接比较重量或 PR。
+- `resolve` 返回的候选包含 `matched_source`：`catalog` 表示命中词典，`history` 表示命中过往日志中的原始叫法。
+
 ## 用户自定义动作
 
 非传统动作仍存放在 `catalog/exercises.json`，不另建一套低优先级词典。示意结构：

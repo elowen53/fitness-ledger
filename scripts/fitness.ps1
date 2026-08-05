@@ -96,12 +96,33 @@ function Resolve-Exercise([string]$Name) {
     $normalized = Normalize-Name $Name
     $baseNormalized = Normalize-Name (Remove-VariantWords $Name)
     $candidates = @()
+    $historicalNames = @{}
+
+    foreach ($record in @(Read-WorkoutRecords)) {
+        $historyId = [string]$record.exercise_id
+        $historyName = [string]$record.reported_name
+        if ([string]::IsNullOrWhiteSpace($historyId) -or [string]::IsNullOrWhiteSpace($historyName)) { continue }
+        if (-not $historicalNames.ContainsKey($historyId)) { $historicalNames[$historyId] = @() }
+        if ($historyName -notin @($historicalNames[$historyId])) {
+            $historicalNames[$historyId] = @($historicalNames[$historyId]) + $historyName
+        }
+    }
 
     foreach ($item in $catalog.exercises) {
         $best = 0
         $matchedAlias = $null
-        $names = @($item.canonical_name) + @($item.aliases)
-        foreach ($alias in $names) {
+        $matchedSource = $null
+        $names = @()
+        foreach ($catalogName in (@($item.canonical_name) + @($item.aliases))) {
+            $names += [pscustomobject]@{ name = $catalogName; source = "catalog" }
+        }
+        if ($historicalNames.ContainsKey([string]$item.id)) {
+            foreach ($historyName in @($historicalNames[[string]$item.id])) {
+                $names += [pscustomobject]@{ name = $historyName; source = "history" }
+            }
+        }
+        foreach ($nameEntry in $names) {
+            $alias = [string]$nameEntry.name
             $a = Normalize-Name $alias
             $score = 0
             if ($normalized -eq $a) { $score = 100 }
@@ -115,9 +136,10 @@ function Resolve-Exercise([string]$Name) {
             elseif ($normalized.Length -ge 2 -and $a.Contains($normalized)) {
                 $score = 65 + [Math]::Min(15, $normalized.Length * 2)
             }
-            if ($score -gt $best) {
+            if ($score -gt $best -or ($score -eq $best -and $nameEntry.source -eq "catalog" -and $matchedSource -eq "history")) {
                 $best = $score
                 $matchedAlias = $alias
+                $matchedSource = $nameEntry.source
             }
         }
         if ($best -ge 65) {
@@ -126,6 +148,7 @@ function Resolve-Exercise([string]$Name) {
                 canonical_name = $item.canonical_name
                 score = $best
                 matched_alias = $matchedAlias
+                matched_source = $matchedSource
             }
         }
     }
@@ -241,11 +264,11 @@ switch ($Command) {
         Write-Host "状态: $($result.status)"
         if ($result.exercise) {
             Write-Host "动作: $($result.exercise.canonical_name) [$($result.exercise.id)]"
-            Write-Host "命中: $($result.exercise.matched_alias)；置信分: $($result.exercise.score)"
+            Write-Host "命中: $($result.exercise.matched_alias)；来源: $($result.exercise.matched_source)；置信分: $($result.exercise.score)"
         }
         Write-Host "变体: angle=$($result.variant.angle), posture=$($result.variant.posture), laterality=$($result.variant.laterality)"
         if ($result.status -ne "resolved") {
-            $result.candidates | Format-Table id, canonical_name, score, matched_alias -AutoSize
+            $result.candidates | Format-Table id, canonical_name, score, matched_alias, matched_source -AutoSize
             exit 2
         }
         break
@@ -401,25 +424,27 @@ switch ($Command) {
                 exercise_id = $record.exercise_id
                 variant = $variantKey
                 equipment = $equipmentName
+                sequence = $record.sequence
                 sessions = 1
                 sets = $workingSets.Count
                 reps = if ($reps) { $reps } else { 0 }
                 volume_kg = $volume
             }
         }
-        $rows = $expanded | Group-Object exercise_id, variant, equipment | ForEach-Object {
+        $rows = $expanded | Group-Object exercise_id, variant, equipment, sequence | ForEach-Object {
             $first = $_.Group[0]
             [pscustomobject]@{
                 exercise_id = $first.exercise_id
                 variant = $first.variant
                 equipment = $first.equipment
+                sequence = $first.sequence
                 entries = ($_.Group | Measure-Object -Property sessions -Sum).Sum
                 sets = ($_.Group | Measure-Object -Property sets -Sum).Sum
                 reps = ($_.Group | Measure-Object -Property reps -Sum).Sum
                 volume_kg = ($_.Group | Measure-Object -Property volume_kg -Sum).Sum
             }
         }
-        if ($Json) { Write-OutputObject @($rows) } else { $rows | Sort-Object exercise_id, variant, equipment | Format-Table -AutoSize }
+        if ($Json) { Write-OutputObject @($rows) } else { $rows | Sort-Object exercise_id, variant, equipment, sequence | Format-Table -AutoSize }
         break
     }
 

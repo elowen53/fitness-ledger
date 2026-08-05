@@ -23,8 +23,15 @@ try {
     & $Script add -Exercise "坐姿哑铃侧平举" -Sets "15x5,13x5" -Date "2026-08-05" -Sequence 2 -ProjectRoot $TempRoot | Out-Null
     & $Script add -Exercise "Y举" -Sets "R:8x20,L:8x20,R:7x20,L:8x20" -Laterality "unilateral" -Date "2026-08-05" -Sequence 3 -ProjectRoot $TempRoot | Out-Null
     & $Script add -Exercise "豪斯特推胸" -ResolveAs "器械推胸" -Sets "9x80" -Equipment "HOIST" -Laterality "bilateral" -Date "2026-08-05" -Sequence 4 -ProjectRoot $TempRoot | Out-Null
+    & $Script add -Exercise "临时编号推胸" -ResolveAs "器械推胸" -Sets "10x50" -Equipment "alignment test machine" -Laterality "bilateral" -Date "2026-08-06" -Sequence 1 -ProjectRoot $TempRoot | Out-Null
+    & $Script add -Exercise "上斜器械推胸" -Sets "10x50" -Equipment "test machine" -Date "2026-08-06" -Sequence 2 -ProjectRoot $TempRoot | Out-Null
+
+    $historyResolved = & $Script resolve -Exercise "临时编号推胸" -ProjectRoot $TempRoot -Json | ConvertFrom-Json
+    if ($historyResolved.status -ne "resolved" -or $historyResolved.exercise.id -ne "machine_chest_press") { throw "历史叫法未对齐到原动作 ID" }
+    if ($historyResolved.exercise.matched_source -ne "history") { throw "历史叫法未标记 history 来源" }
+
     $validation = & $Script validate -ProjectRoot $TempRoot -Json | ConvertFrom-Json
-    if ($validation.status -ne "ok" -or $validation.workout_records -ne 4) { throw "记录校验失败" }
+    if ($validation.status -ne "ok" -or $validation.workout_records -ne 6) { throw "记录校验失败" }
 
     $unilateralLog = Get-Content -LiteralPath (Join-Path $TempRoot "data\workouts\2026\08\2026-08-05.jsonl") -Encoding UTF8 | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.exercise_id -eq "user_y_raise" } | Select-Object -First 1
     if ($unilateralLog.sets[0].side -ne "right" -or $unilateralLog.sets[2].round -ne 2) { throw "单侧与轮次解析错误" }
@@ -33,8 +40,11 @@ try {
 
     $stats = & $Script stats -Exercise "器械推胸" -ProjectRoot $TempRoot -Json | ConvertFrom-Json
     $testMachineStats = @($stats | Where-Object { $_.equipment -eq "machine/test machine" })
-    if ($testMachineStats.Count -ne 1) { throw "统计分组数量错误" }
-    if ($testMachineStats[0].volume_kg -ne 930) { throw "训练量计算错误: $($testMachineStats[0].volume_kg)" }
+    if ($testMachineStats.Count -ne 2) { throw "不同顺序角色未分开统计" }
+    $sequenceOne = @($testMachineStats | Where-Object { $_.sequence -eq 1 })
+    $sequenceTwo = @($testMachineStats | Where-Object { $_.sequence -eq 2 })
+    if ($sequenceOne.Count -ne 1 -or $sequenceOne[0].volume_kg -ne 930) { throw "顺序1训练量计算错误" }
+    if ($sequenceTwo.Count -ne 1 -or $sequenceTwo[0].volume_kg -ne 500) { throw "顺序2训练量计算错误" }
 
     Write-Host "smoke tests passed"
 } finally {

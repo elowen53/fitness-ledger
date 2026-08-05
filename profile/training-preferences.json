@@ -1,5 +1,18 @@
 {
   "schema_version": 1,
+  "recording_preferences": {
+    "exercise_alignment": {
+      "required_before_write": true,
+      "match_sources": ["catalog", "workout_history"],
+      "confirm_when_uncertain": true,
+      "reuse_existing_exercise_id": true,
+      "create_new_only_after_no_match_and_confirmation": true,
+      "trend_key": ["exercise_id", "variant", "equipment", "sequence"],
+      "meaning": "动作名称可以变化，但同一基本动作必须保持唯一 ID；长期趋势只比较变体、器械和顺序角色一致的记录。",
+      "status": "user_confirmed",
+      "confirmed_on": "2026-08-05"
+    }
+  },
   "exercise_order": {
     "preserve_reported_order": true,
     "meaning": "动作顺序属于训练事实；后补确认的动作仍使用用户最初报告的位置。"
