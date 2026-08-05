@@ -1,0 +1,44 @@
+﻿$ErrorActionPreference = "Stop"
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$Script = Join-Path $ProjectRoot "scripts\fitness.ps1"
+$TempRoot = Join-Path ([IO.Path]::GetTempPath()) ("fitness-ledger-test-" + [guid]::NewGuid().ToString("N"))
+
+try {
+    New-Item -ItemType Directory -Path (Join-Path $TempRoot "catalog") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $TempRoot "data\workouts") -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $ProjectRoot "catalog\exercises.json") -Destination (Join-Path $TempRoot "catalog\exercises.json")
+
+    $resolved = & $Script resolve -Exercise "上斜器械推胸" -ProjectRoot $TempRoot -Json | ConvertFrom-Json
+    if ($resolved.status -ne "resolved") { throw "上斜器械推胸未解析" }
+    if ($resolved.exercise.id -ne "machine_chest_press") { throw "动作 ID 错误" }
+    if ($resolved.variant.angle -ne "incline") { throw "角度解析错误" }
+
+    $branded = & $Script resolve -Exercise "力健上斜推胸机" -ProjectRoot $TempRoot -Json | ConvertFrom-Json
+    if ($branded.status -ne "resolved" -or $branded.exercise.id -ne "machine_chest_press") { throw "带品牌动作名未解析" }
+
+    $nonstandard = & $Script resolve -Exercise "自创飞盘动作" -ProjectRoot $TempRoot -Json 2>$null | ConvertFrom-Json
+    if ($nonstandard.status -ne "unknown") { throw "未定义的非传统动作应要求用户确认" }
+
+    & $Script add -Exercise "上斜器械推胸" -Sets "12x40@2", "10x45@1" -Equipment "test machine" -Date "2026-08-05" -Sequence 1 -ProjectRoot $TempRoot | Out-Null
+    & $Script add -Exercise "坐姿哑铃侧平举" -Sets "15x5,13x5" -Date "2026-08-05" -Sequence 2 -ProjectRoot $TempRoot | Out-Null
+    & $Script add -Exercise "Y举" -Sets "R:8x20,L:8x20,R:7x20,L:8x20" -Laterality "unilateral" -Date "2026-08-05" -Sequence 3 -ProjectRoot $TempRoot | Out-Null
+    & $Script add -Exercise "豪斯特推胸" -ResolveAs "器械推胸" -Sets "9x80" -Equipment "HOIST" -Laterality "bilateral" -Date "2026-08-05" -Sequence 4 -ProjectRoot $TempRoot | Out-Null
+    $validation = & $Script validate -ProjectRoot $TempRoot -Json | ConvertFrom-Json
+    if ($validation.status -ne "ok" -or $validation.workout_records -ne 4) { throw "记录校验失败" }
+
+    $unilateralLog = Get-Content -LiteralPath (Join-Path $TempRoot "data\workouts\2026\08\2026-08-05.jsonl") -Encoding UTF8 | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.exercise_id -eq "user_y_raise" } | Select-Object -First 1
+    if ($unilateralLog.sets[0].side -ne "right" -or $unilateralLog.sets[2].round -ne 2) { throw "单侧与轮次解析错误" }
+    $expectedLog = Join-Path $TempRoot "data\workouts\2026\08\2026-08-05.jsonl"
+    if (-not (Test-Path -LiteralPath $expectedLog)) { throw "日志未写入按年月分层的路径" }
+
+    $stats = & $Script stats -Exercise "器械推胸" -ProjectRoot $TempRoot -Json | ConvertFrom-Json
+    $testMachineStats = @($stats | Where-Object { $_.equipment -eq "machine/test machine" })
+    if ($testMachineStats.Count -ne 1) { throw "统计分组数量错误" }
+    if ($testMachineStats[0].volume_kg -ne 930) { throw "训练量计算错误: $($testMachineStats[0].volume_kg)" }
+
+    Write-Host "smoke tests passed"
+} finally {
+    if (Test-Path -LiteralPath $TempRoot) {
+        Remove-Item -LiteralPath $TempRoot -Recurse -Force
+    }
+}

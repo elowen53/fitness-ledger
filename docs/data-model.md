@@ -1,0 +1,61 @@
+# 数据模型
+
+每条 JSONL 记录代表一次训练中的一个动作，包含若干组。`schema_version` 用于将来迁移。
+
+```json
+{
+  "schema_version": 1,
+  "id": "20260805-193012-a1b2c3",
+  "performed_at": "2026-08-05T19:30:12.0000000+08:00",
+  "sequence": 1,
+  "exercise_id": "machine_chest_press",
+  "reported_name": "力健上斜推胸机",
+  "variant": {
+    "angle": "incline",
+    "posture": null,
+    "laterality": null,
+    "grip": null
+  },
+  "equipment": {
+    "type": "machine",
+    "name": "Life Fitness Insignia"
+  },
+  "sets": [
+    {"reps": 12, "weight_kg": 40, "rir": 2, "duration_sec": null, "bodyweight": false, "warmup": false, "side": null, "round": null}
+  ],
+  "notes": "座椅 4 档",
+  "tags": ["push"]
+}
+```
+
+设计规则：
+
+- `reported_name` 永远保留原始叫法，便于发现误归一化。
+- `sequence` 是用户实际训练顺序，从 1 开始；分析和展示训练日时优先按它排序，不能用落盘时间代替。
+- 未知值用 `null`，不使用空字符串或臆测值。
+- kg 是唯一外部负重单位；自重动作使用 `bodyweight=true`，不把体重伪装成外部负重。
+- 默认训练量只计算非热身且同时有 `reps`、`weight_kg` 的组。
+- 单侧动作的 `side` 使用 `left | right`，`round` 表示该侧的第几轮。双侧动作两者均为 `null`。
+- 会影响动作可比性的握法保存在 `variant.grip`。例如窄距对握为 `narrow_neutral`，宽距为 `wide`。
+- `equipment.type` 保存 `machine / cable / barbell / dumbbell / bodyweight` 等可比较的器械大类。
+- `equipment.name` 不做全局枚举，因为同一器械在不同健身房可能有不同标识。
+
+## 用户自定义动作
+
+非传统动作仍存放在 `catalog/exercises.json`，不另建一套低优先级词典。示意结构：
+
+```json
+{
+  "id": "user_y_raise",
+  "canonical_name": "Y举",
+  "naming_status": "user_defined",
+  "definition": "由用户确认后的简短动作描述；未确认前不创建",
+  "target_basis": "user_confirmed",
+  "primary_muscles": ["side_delts", "rear_delts"]
+}
+```
+
+- 文档示例本身不构成动作定义；真实定义需结合用户实际做法确认。
+- `naming_status` 缺省时视为 `conventional`。
+- `target_basis=user_confirmed` 表示记录的是用户的训练意图，不宣称这是医学或生物力学共识。
+- 自定义动作必须有非空 `definition` 和至少一个 `primary_muscles`，词典校验会检查这一点。

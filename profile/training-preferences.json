@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "exercise_order": {
+    "preserve_reported_order": true,
+    "meaning": "动作顺序属于训练事实；后补确认的动作仍使用用户最初报告的位置。"
+  },
+  "priority_rotation": {
+    "chest_back_day": {
+      "enabled": true,
+      "strategy": "alternate_first_muscle_group",
+      "last_completed_priority": "back",
+      "next_priority": "chest",
+      "original_user_hypothesis": "先练的部位拥有更多神经资源。",
+      "evidence_summary": "先做动作通常获得更大的力量增益；当前汇总证据未发现动作顺序对肌肉肥大有显著影响。",
+      "prescription_basis": "轮换优先肌群，用于公平分配训练前段的表现与力量发展优势，而非宣称提高总体肌肥大。",
+      "comparison_rule": "胸部优先日与胸部优先历史比较，背部优先日与背部优先历史比较。",
+      "status": "evidence_informed",
+      "templates": {
+        "chest_first": [
+          "FORWARD推胸",
+          "窄距对握钢线下拉",
+          "豪斯特推胸",
+          "窄距钢线划船",
+          "蝴蝶机夹胸",
+          "高位下拉宽距"
+        ],
+        "back_first": [
+          "窄距对握钢线下拉",
+          "FORWARD推胸",
+          "窄距钢线划船",
+          "豪斯特推胸",
+          "高位下拉宽距",
+          "蝴蝶机夹胸"
+        ]
+      }
+    }
+  }
+}

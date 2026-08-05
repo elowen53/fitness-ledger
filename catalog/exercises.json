@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "exercises": [
+    {
+      "id": "machine_chest_press",
+      "canonical_name": "器械推胸",
+      "movement_pattern": "horizontal_push",
+      "primary_muscles": ["chest"],
+      "equipment_type": "machine",
+      "aliases": ["器械推胸", "固定器械推胸", "推胸机", "坐姿推胸机", "坐姿胸推", "胸推器械", "machine chest press", "chest press machine"],
+      "supported_variants": {
+        "angle": ["flat", "incline", "decline"],
+        "posture": ["seated"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "barbell_bench_press",
+      "canonical_name": "杠铃卧推",
+      "movement_pattern": "horizontal_push",
+      "primary_muscles": ["chest"],
+      "equipment_type": "barbell",
+      "aliases": ["杠铃卧推", "卧推", "平板卧推", "bench press", "barbell bench press"],
+      "supported_variants": {
+        "angle": ["flat", "incline", "decline"],
+        "posture": ["lying"],
+        "laterality": ["bilateral"]
+      }
+    },
+    {
+      "id": "dumbbell_bench_press",
+      "canonical_name": "哑铃卧推",
+      "movement_pattern": "horizontal_push",
+      "primary_muscles": ["chest"],
+      "equipment_type": "dumbbell",
+      "aliases": ["哑铃卧推", "哑铃推胸", "dumbbell bench press", "dumbbell chest press"],
+      "supported_variants": {
+        "angle": ["flat", "incline", "decline"],
+        "posture": ["lying"],
+        "laterality": ["bilateral", "unilateral", "alternating"]
+      }
+    },
+    {
+      "id": "cable_fly",
+      "canonical_name": "绳索夹胸",
+      "movement_pattern": "chest_adduction",
+      "primary_muscles": ["chest"],
+      "equipment_type": "cable",
+      "aliases": ["绳索夹胸", "龙门架夹胸", "绳索飞鸟", "cable fly", "cable crossover"],
+      "supported_variants": {
+        "angle": ["flat", "incline", "decline"],
+        "posture": ["standing", "seated", "lying"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "pec_deck_fly",
+      "canonical_name": "蝴蝶机夹胸",
+      "movement_pattern": "chest_adduction",
+      "primary_muscles": ["chest"],
+      "equipment_type": "machine",
+      "aliases": ["蝴蝶机夹胸", "蝴蝶机飞鸟", "器械夹胸", "夹胸机", "夹胸", "pec deck fly", "machine fly"],
+      "supported_variants": {
+        "angle": ["flat"],
+        "posture": ["seated"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "lat_pulldown",
+      "canonical_name": "高位下拉",
+      "movement_pattern": "vertical_pull",
+      "primary_muscles": ["lats"],
+      "equipment_type": "cable_or_machine",
+      "aliases": ["高位下拉", "下拉", "拉力器下拉", "lat pulldown", "pulldown"],
+      "supported_variants": {
+        "angle": ["vertical"],
+        "posture": ["seated", "kneeling"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "seated_cable_row",
+      "canonical_name": "坐姿绳索划船",
+      "movement_pattern": "horizontal_pull",
+      "primary_muscles": ["back"],
+      "equipment_type": "cable",
+      "aliases": ["坐姿绳索划船", "坐姿划船", "绳索划船", "seated cable row", "cable row"],
+      "supported_variants": {
+        "angle": ["flat"],
+        "posture": ["seated"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "barbell_back_squat",
+      "canonical_name": "杠铃后蹲",
+      "movement_pattern": "squat",
+      "primary_muscles": ["quads", "glutes"],
+      "equipment_type": "barbell",
+      "aliases": ["杠铃后蹲", "后蹲", "深蹲", "杠铃深蹲", "back squat", "barbell squat"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing"],
+        "laterality": ["bilateral"]
+      }
+    },
+    {
+      "id": "leg_press",
+      "canonical_name": "腿举",
+      "movement_pattern": "squat",
+      "primary_muscles": ["quads", "glutes"],
+      "equipment_type": "machine",
+      "aliases": ["腿举", "倒蹬", "腿举机", "倒蹬机", "leg press"],
+      "supported_variants": {
+        "angle": ["incline", "flat"],
+        "posture": ["seated", "lying"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "barbell_deadlift",
+      "canonical_name": "杠铃硬拉",
+      "movement_pattern": "hinge",
+      "primary_muscles": ["hamstrings", "glutes", "back"],
+      "equipment_type": "barbell",
+      "aliases": ["杠铃硬拉", "硬拉", "传统硬拉", "deadlift", "conventional deadlift"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing"],
+        "laterality": ["bilateral"]
+      }
+    },
+    {
+      "id": "romanian_deadlift",
+      "canonical_name": "罗马尼亚硬拉",
+      "movement_pattern": "hinge",
+      "primary_muscles": ["hamstrings", "glutes"],
+      "equipment_type": "free_weight",
+      "aliases": ["罗马尼亚硬拉", "罗马尼亚式硬拉", "直腿硬拉", "RDL", "romanian deadlift"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "overhead_press",
+      "canonical_name": "过头推举",
+      "movement_pattern": "vertical_push",
+      "primary_muscles": ["shoulders"],
+      "equipment_type": "free_weight_or_machine",
+      "aliases": ["过头推举", "肩推", "推肩", "肩上推举", "overhead press", "shoulder press"],
+      "supported_variants": {
+        "angle": ["vertical"],
+        "posture": ["standing", "seated"],
+        "laterality": ["bilateral", "unilateral", "alternating"]
+      }
+    },
+    {
+      "id": "lateral_raise",
+      "canonical_name": "侧平举",
+      "movement_pattern": "shoulder_abduction",
+      "primary_muscles": ["side_delts"],
+      "equipment_type": "free_weight_or_cable_or_machine",
+      "aliases": ["侧平举", "哑铃侧平举", "绳索侧平举", "器械侧平举", "lateral raise"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "seated", "lying"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "biceps_curl",
+      "canonical_name": "肱二头弯举",
+      "movement_pattern": "elbow_flexion",
+      "primary_muscles": ["biceps"],
+      "equipment_type": "free_weight_or_cable_or_machine",
+      "aliases": ["肱二头弯举", "二头弯举", "弯举", "biceps curl", "curl"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "seated", "lying"],
+        "laterality": ["bilateral", "unilateral", "alternating"]
+      }
+    },
+    {
+      "id": "triceps_pushdown",
+      "canonical_name": "肱三头下压",
+      "movement_pattern": "elbow_extension",
+      "primary_muscles": ["triceps"],
+      "equipment_type": "cable",
+      "aliases": ["肱三头下压", "三头下压", "绳索下压", "triceps pushdown", "pushdown"],
+      "supported_variants": {
+        "angle": ["vertical"],
+        "posture": ["standing"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "straight_arm_pulldown",
+      "canonical_name": "直臂下拉",
+      "movement_pattern": "shoulder_extension",
+      "primary_muscles": ["lats"],
+      "equipment_type": "cable",
+      "aliases": ["直臂下拉", "直臂下压", "绳索直臂下拉", "straight arm pulldown", "cable pullover"],
+      "supported_variants": {
+        "angle": ["vertical"],
+        "posture": ["standing", "kneeling"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "user_y_raise",
+      "canonical_name": "Y举",
+      "naming_status": "user_defined",
+      "definition": "用户定义的单侧动作，主要训练意图为三角肌中束和后束；具体器械、姿势和轨迹尚未提供。",
+      "target_basis": "user_confirmed",
+      "movement_pattern": "user_defined",
+      "primary_muscles": ["side_delts", "rear_delts"],
+      "equipment_type": "unspecified",
+      "aliases": [],
+      "supported_variants": {
+        "angle": [],
+        "posture": [],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    }
+  ]
+}

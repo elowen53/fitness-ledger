@@ -1,0 +1,5 @@
+# Local scratch files; training data is intentionally versioned.
+.tmp/
+*.bak
+*.log
+
