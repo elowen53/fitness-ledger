@@ -16,10 +16,12 @@
 1. 读取 `catalog/exercises.json`，或调用 `scripts/fitness.ps1 resolve -Exercise <原始叫法> -Json`。
 2. 将动作拆成：规范动作 `exercise_id`、变体、具体器械。不要为每个品牌或角度创建新的规范动作。
 3. 只有在结果唯一且语义合理时才写入。脚本返回 `ambiguous` 或 `unknown` 时，先向用户确认。
-4. 使用 `scripts/fitness.ps1 add` 写入，不要手工拼 JSONL。始终保留用户原话到 `reported_name`。
+4. 使用脚本写入，不要手工拼 JSONL。Windows 用 `scripts/fitness.ps1 add`，macOS / Linux 用 `scripts/fitness.sh add`（等价于 `scripts/fitness.py add`）。两个实现共享同一词典与数据格式，行为和校验规则一致。始终保留用户原话到 `reported_name`。
 5. 严格按用户报告的先后顺序写入 `sequence`。即使某动作因等待确认而稍后补写，也必须保留它在原训练中的位置，不能使用落盘时间代替动作顺序。
-6. 写入后运行 `validate`。若本轮包含多条动作，全部完成后再运行一次即可。
+6. 写入后运行 `validate`（Windows：`scripts/fitness.ps1 validate`；macOS / Linux：`scripts/fitness.sh validate`）。若本轮包含多条动作，全部完成后再运行一次即可。
 7. 简短回报日期、规范动作、变体、器械、顺序和组数；指出任何采用的假设。不要自动提交 Git，除非用户明确要求。
+
+> 平台说明：`scripts/fitness.py` 是 `scripts/fitness.ps1` 的跨平台镜像实现（macOS / Linux 用系统自带 python3 运行），新功能或规则变更必须同时更新两个脚本，并通过 `tests/smoke.ps1` 与 `tests/smoke.sh` 验证。
 
 ## 动作对齐与长期身份
 

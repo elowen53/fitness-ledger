@@ -37,7 +37,7 @@
 
 > 记录今天训练：力健上斜推胸机，40kg 12次，45kg 10次两组，最后一组 RIR 1。
 
-Agent 会先解析动作，再调用脚本落盘。你也可以自己使用 CLI：
+Agent 会先解析动作，再调用脚本落盘。CLI 同时提供 Windows 与 macOS 版本，两者行为一致、共享同一数据格式；你也可以自己使用：
 
 ```powershell
 # 看一个自然语言名称会被识别成什么
@@ -58,6 +58,22 @@ powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 stats -Exercise "
 powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 validate
 ```
 
+```bash
+# macOS / Linux（系统自带 python3 即可，无需安装 PowerShell）
+./scripts/fitness.sh resolve --exercise "力健上斜推胸机"
+
+# 12x40 表示 12 次 × 40 kg；@2 表示 RIR 2
+./scripts/fitness.sh add \
+  --exercise "上斜器械推胸" \
+  --sets "12x40@2","10x45@1","10x45@1" \
+  --equipment "Life Fitness Insignia" \
+  --notes "座椅 4 档"
+
+./scripts/fitness.sh recent --limit 10
+./scripts/fitness.sh stats --exercise "器械推胸"
+./scripts/fitness.sh validate
+```
+
 计时组写作 `30s`，自重组写作 `12xbw`。`-WarmupCount 2` 会把前两组标成热身组。重量统一按 kg 存储。
 
 单侧动作可写成 `R:8x20,L:8x20,R:7x20,L:8x20`。没有写左右时，Agent 按双侧动作记录；写明左右时，每侧数据独立保存，并保留对应轮次。
@@ -74,9 +90,14 @@ fitness-ledger/
 ├── docs/data-model.md
 ├── examples/example-workout.jsonl
 ├── knowledge/hypertrophy-training.md
-├── scripts/fitness.ps1
-└── tests/smoke.ps1
+├── scripts/fitness.ps1   # Windows（PowerShell）
+├── scripts/fitness.sh    # macOS / Linux（调用 fitness.py）
+├── scripts/fitness.py    # 跨平台 Python 实现（macOS / Linux）
+├── tests/smoke.ps1       # Windows 冒烟测试
+└── tests/smoke.sh        # macOS / Linux 冒烟测试
 ```
+
+`scripts/fitness.py` 与 `scripts/fitness.ps1` 的命令、参数和输出保持一致：`resolve / add / resequence / recent / stats / list / validate`。PowerShell 风格参数（`-Exercise`）和 GNU 风格参数（`--exercise`）在 macOS 版中都可使用。
 
 ## Git 工作流
 
