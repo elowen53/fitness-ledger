@@ -29,6 +29,7 @@
 - `knowledge/`：带来源和版本记录的长期训练知识；肌肥大计划以 ACSM 2026 为当前原则。
 - `knowledge/exercise-order.md`：动作顺序对力量与肌肥大的证据，以及胸背日优先级模板。
 - `profile/training-preferences.json`：用户确认的长期训练偏好，例如胸背日优先肌群轮换。
+- 没有训练记录的日期按休息日处理，不创建空训练日志。
 
 ## 最短使用路径
 
@@ -94,3 +95,12 @@ git commit -m "workout: 2026-08-05 push"
 第一版专注力量训练：次数、重量、RIR、计时组和热身标记。它不猜测左右两边重量的含义，也不自动换算器械配重片。如果一句话存在两种合理解释，Agent 应先询问，而不是静默写入错误数据。
 
 动作词典允许用户自定义动作，不要求每个动作都有国际统一名称。自定义动作在确认训练部位和最小动作定义之前不会落盘。
+## 训练日类型
+
+新日志会保存 `day_type`：`standard`（标准/积累）、`overload`（渐进超负荷）或 `deload`（减载）。测试/PR 和技术练习使用 `tags` 或 `notes` 记录。例如：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 add -Exercise "器械推胸" -Sets "10x80","9x80" -DayType overload -DayTypeBasis planned -Notes "overload_lever=reps"
+```
+
+不要用单日 `重量×次数` 自动判断超负荷或减载；比较时需匹配动作、变体、器械和顺序角色。完整规则见 [`knowledge/training-day-types.md`](knowledge/training-day-types.md)。

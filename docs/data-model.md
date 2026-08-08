@@ -7,6 +7,8 @@
   "schema_version": 1,
   "id": "20260805-193012-a1b2c3",
   "performed_at": "2026-08-05T19:30:12.0000000+08:00",
+  "day_type": "standard",
+  "day_type_basis": "default",
   "sequence": 1,
   "exercise_id": "machine_chest_press",
   "reported_name": "力健上斜推胸机",
@@ -67,3 +69,5 @@
 - `naming_status` 缺省时视为 `conventional`。
 - `target_basis=user_confirmed` 表示记录的是用户的训练意图，不宣称这是医学或生物力学共识。
 - 自定义动作必须有非空 `definition` 和至少一个 `primary_muscles`，词典校验会检查这一点。
+- `day_type` 可为 `standard | overload | deload`，同一训练日应保持一致；`day_type_basis` 用于记录是计划、用户说明还是后续比较推定。旧记录可缺少这两个字段。
+- `overload` 不是单日重量较大的同义词；需要在 `notes` 中说明 `overload_lever`（`load`/`reps`/`sets`/`density`）和可比基线。`deload` 只在有意降低训练压力时使用，不因一次低表现事后推定。完整定义见 `knowledge/training-day-types.md`。

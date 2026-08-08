@@ -16,6 +16,9 @@ param(
     [string]$Grip,
     [string]$Notes,
     [string[]]$Tags,
+    [ValidateSet("standard", "overload", "deload")]
+    [string]$DayType = "standard",
+    [string]$DayTypeBasis = "default",
     [int]$Sequence = 0,
     [int]$WarmupCount = 0,
     [int]$Limit = 10,
@@ -325,6 +328,8 @@ switch ($Command) {
             schema_version = 1
             id = $performed.ToString("yyyyMMdd-HHmmss") + "-" + $shortId
             performed_at = $performed.ToString("o")
+            day_type = $DayType
+            day_type_basis = $DayTypeBasis
             sequence = if ($Sequence -gt 0) { $Sequence } else { $null }
             exercise_id = $resolution.exercise.id
             reported_name = $Exercise
@@ -359,6 +364,7 @@ switch ($Command) {
         $rows = Read-WorkoutRecords | Sort-Object performed_at -Descending | Select-Object -First $Limit | ForEach-Object {
             [pscustomobject]@{
                 date = ([datetimeoffset]$_.performed_at).ToString("yyyy-MM-dd")
+                day_type = if ($_.day_type) { $_.day_type } else { "unclassified" }
                 sequence = $_.sequence
                 exercise = $nameMap[$_.exercise_id]
                 variant = (@($_.variant.angle, $_.variant.posture, $_.variant.laterality, $_.variant.grip) | Where-Object { $_ }) -join "/"
@@ -479,10 +485,23 @@ switch ($Command) {
         }
         $records = @(Read-WorkoutRecords)
         $sequenceByDate = @{}
+        $dayTypeByDate = @{}
+        $allowedDayTypes = @("standard", "overload", "deload")
         foreach ($record in $records) {
             if ($record.schema_version -ne 1) { $errors += "记录 $($record.id) schema_version 不是 1" }
             if (-not $ids.ContainsKey([string]$record.exercise_id)) { $errors += "记录 $($record.id) 引用了未知动作 $($record.exercise_id)" }
             if (@($record.sets).Count -eq 0) { $errors += "记录 $($record.id) 没有训练组" }
+            if ($null -ne $record.day_type -and $record.day_type -notin $allowedDayTypes) {
+                $errors += "记录 $($record.id) 的 day_type 无效: $($record.day_type)"
+            }
+            if ($null -ne $record.day_type) {
+                $recordDateForType = ([datetimeoffset]$record.performed_at).ToString("yyyy-MM-dd")
+                if ($dayTypeByDate.ContainsKey($recordDateForType) -and $dayTypeByDate[$recordDateForType] -ne $record.day_type) {
+                    $errors += "同一天混用 day_type $recordDateForType：$($dayTypeByDate[$recordDateForType]) / $($record.day_type)"
+                } else {
+                    $dayTypeByDate[$recordDateForType] = $record.day_type
+                }
+            }
             if ($null -ne $record.sequence) {
                 if ([int]$record.sequence -lt 1) { $errors += "记录 $($record.id) 的 sequence 必须大于 0" }
                 $recordDate = ([datetimeoffset]$record.performed_at).ToString("yyyy-MM-dd")

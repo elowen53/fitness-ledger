@@ -6,6 +6,7 @@
 
 - [`hypertrophy-training.md`](hypertrophy-training.md)：健康成人肌肉肥大训练的长期指导和 Agent 决策规则。
 - [`exercise-order.md`](exercise-order.md)：动作顺序对力量和肌肥大的不同影响，以及胸背日交替优先模板。
+- 休息日规则：按 `profile/training-preferences.json` 解释，无训练记录的日期标记为休息日，不生成空日志。
 
 ## 使用原则
 
@@ -13,3 +14,4 @@
 2. 新指南优先于旧指南，原始立场声明优先于二手文章。
 3. 文档中的数值区间是群体层面的参考起点，不替代用户的训练历史、恢复状态和器械环境。
 4. 来源更新时，保留修订日期和变更原因，避免无审计痕迹地覆盖旧规则。
+- [`training-day-types.md`](training-day-types.md)：训练日类型、渐进超负荷/减载的操作定义，以及容量和重量的分离记录规则。

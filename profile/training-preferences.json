@@ -17,6 +17,11 @@
     "preserve_reported_order": true,
     "meaning": "动作顺序属于训练事实；后补确认的动作仍使用用户最初报告的位置。"
   },
+  "calendar_interpretation": {
+    "no_workout_record_is_rest_day": true,
+    "meaning": "没有训练记录的日期按休息日处理；不额外创建空训练日志。",
+    "status": "user_preference"
+  },
   "priority_rotation": {
     "chest_back_day": {
       "enabled": true,
