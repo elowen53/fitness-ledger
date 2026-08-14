@@ -94,7 +94,7 @@
 - 展示训练日、复盘表现和寻找可比历史时，按 `sequence` 排序；`performed_at` 只表示记录中的时间戳，不能替代训练顺序。
 - 同一天的 `sequence` 不得重复。用户未提供顺序时才询问，不按动作类别自行重排。
 - 设计顺序前读取 `knowledge/exercise-order.md`。当前结论是：先做动作通常有利于该动作的力量发展，但没有可靠证据显示顺序会显著改变肌肉肥大。
-- 胸背日按 `profile/training-preferences.json` 的证据化模板轮换优先肌群。2026-08-05 已确认是背部优先，下一次胸背日使用胸部优先模板。
+- 胸背日按 `profile/training-preferences.json` 的证据化模板轮换优先肌群。轮换状态（`last_completed_priority` / `next_priority`）以 profile 为准，本文件不复制其值，避免过期。
 - 比较进步时必须匹配顺序角色；胸部优先日不直接与背部优先日的同动作表现判定进步或退步。
 - 只有训练实际完成后才更新 `last_completed_priority` 和 `next_priority`；生成计划本身不推进轮换状态。
 ## 训练日类型标记
