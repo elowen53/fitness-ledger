@@ -26,8 +26,8 @@
     "chest_back_day": {
       "enabled": true,
       "strategy": "alternate_first_muscle_group",
-      "last_completed_priority": "chest",
-      "next_priority": "back",
+      "last_completed_priority": "back",
+      "next_priority": "chest",
       "original_user_hypothesis": "先练的部位拥有更多神经资源。",
       "evidence_summary": "先做动作通常获得更大的力量增益；当前汇总证据未发现动作顺序对肌肉肥大有显著影响。",
       "prescription_basis": "轮换优先肌群，用于公平分配训练前段的表现与力量发展优势，而非宣称提高总体肌肥大。",
