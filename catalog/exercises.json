@@ -236,6 +236,62 @@
       }
     },
     {
+      "id": "pull_up",
+      "canonical_name": "引体向上",
+      "movement_pattern": "vertical_pull",
+      "primary_muscles": ["lats", "back"],
+      "equipment_type": "bodyweight",
+      "aliases": ["引体向上", "引体", "正手引体向上", "pull up", "pull-up"],
+      "supported_variants": {
+        "angle": [],
+        "posture": [],
+        "laterality": ["bilateral", "unilateral"],
+        "grip": ["wide", "narrow", "neutral", "narrow_neutral"]
+      }
+    },
+    {
+      "id": "t_bar_row",
+      "canonical_name": "T杆划船",
+      "movement_pattern": "horizontal_pull",
+      "primary_muscles": ["back"],
+      "equipment_type": "machine",
+      "aliases": ["T杆划船", "T杠划船", "t bar row", "t-bar row"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "lying"],
+        "laterality": ["bilateral"],
+        "grip": ["wide", "narrow", "neutral"]
+      }
+    },
+    {
+      "id": "dumbbell_row",
+      "canonical_name": "哑铃划船",
+      "movement_pattern": "horizontal_pull",
+      "primary_muscles": ["lats", "back"],
+      "equipment_type": "dumbbell",
+      "aliases": ["哑铃划船", "单臂哑铃划船", "dumbbell row"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "lying", "kneeling"],
+        "laterality": ["bilateral", "unilateral", "alternating"],
+        "grip": ["neutral", "wide", "narrow"]
+      }
+    },
+    {
+      "id": "reverse_fly",
+      "canonical_name": "反向飞鸟",
+      "movement_pattern": "horizontal_abduction",
+      "primary_muscles": ["rear_delts"],
+      "equipment_type": "machine",
+      "aliases": ["反向飞鸟", "蝴蝶机反向飞鸟", "俯身反向飞鸟", "reverse fly", "reverse pec deck"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "seated", "lying"],
+        "laterality": ["bilateral", "unilateral"],
+        "grip": []
+      }
+    },
+    {
       "id": "user_y_raise",
       "canonical_name": "Y举",
       "naming_status": "user_defined",
