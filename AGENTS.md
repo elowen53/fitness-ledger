@@ -59,6 +59,7 @@
 - 单侧器械若用户只报一个数字，不猜测这是“每侧”还是“总重”；需要确认，或把解释写进 `notes`。
 - 热身组通过 `-WarmupCount` 标记，不计入默认训练量统计。
 - 失败组可记录实际完成次数；额外语义写入 `notes`，不捏造 RIR。
+- 用户已确认所有工作组均练至力竭：未报告 RIR 时默认记录 `rir=0`，不再询问或留空（2026-08-18 确认，见 `profile/training-preferences.json` 的 `recording_preferences.rir_default`）。
 
 ## 动作身份与变体
 
