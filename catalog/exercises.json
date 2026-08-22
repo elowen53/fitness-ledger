@@ -292,6 +292,23 @@
       }
     },
     {
+      "id": "reverse_fly_external_rotation",
+      "canonical_name": "肱骨外旋反向飞鸟",
+      "naming_status": "user_defined",
+      "definition": "蝴蝶机反向飞鸟，肱骨外旋，区别于内旋的常规反向飞鸟；用户说明主要练习三角肌中束（target_basis=user_confirmed）。",
+      "target_basis": "user_confirmed",
+      "movement_pattern": "horizontal_abduction",
+      "primary_muscles": ["side_delts"],
+      "equipment_type": "machine",
+      "aliases": ["肱骨外旋反向飞鸟", "外旋反向飞鸟", "反向飞鸟外旋"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "seated", "lying"],
+        "laterality": ["bilateral", "unilateral"],
+        "grip": []
+      }
+    },
+    {
       "id": "user_y_raise",
       "canonical_name": "Y举",
       "naming_status": "user_defined",
