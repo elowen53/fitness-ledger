@@ -278,6 +278,19 @@
       }
     },
     {
+      "id": "shrug",
+      "canonical_name": "耸肩",
+      "movement_pattern": "scapular_elevation",
+      "primary_muscles": ["back"],
+      "equipment_type": "free_weight_or_machine",
+      "aliases": ["耸肩", "哑铃耸肩", "杠铃耸肩", "shrug", "dumbbell shrug", "barbell shrug"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "seated"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
       "id": "reverse_fly",
       "canonical_name": "反向飞鸟",
       "movement_pattern": "horizontal_abduction",
