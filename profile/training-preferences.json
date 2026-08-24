@@ -19,6 +19,21 @@
       "confirmed_on": "2026-08-18"
     }
   },
+  "progression_preferences": {
+    "priority_order": ["movement_quality", "quantity", "load"],
+    "movement_quality_first": {
+      "meaning": "动作质量是第一绝对重要的训练标准，远优于完成数量和工作重量。只有动作质量保持或提高时，增加次数、组数或重量才视为有效进步。",
+      "status": "user_confirmed",
+      "confirmed_on": "2026-08-24"
+    },
+    "quality_improvement_with_load_reduction": {
+      "classification": "major_progress",
+      "meaning": "当用户明确报告因动作优化而降低工作重量，并确认动作质量明显提高时，将其视为大的进步而不是退步。客观重量仍按实际值记录，并以优化后的动作质量和当前重量建立新的可比基线。",
+      "do_not_infer_from_load_drop_alone": true,
+      "status": "user_confirmed",
+      "confirmed_on": "2026-08-24"
+    }
+  },
   "exercise_order": {
     "preserve_reported_order": true,
     "meaning": "动作顺序属于训练事实；后补确认的动作仍使用用户最初报告的位置。"
