@@ -23,6 +23,8 @@
 
 > 平台说明：`scripts/fitness.py` 是 `scripts/fitness.ps1` 的跨平台镜像实现（macOS / Linux 用系统自带 python3 运行），新功能或规则变更必须同时更新两个脚本，并通过 `tests/smoke.ps1` 与 `tests/smoke.sh` 验证。
 
+脚本命令、参数、组格式和常用调用示例集中记录在 `docs/agent-cli.md`。需要查询 CLI 用法时读取该文档，不要依赖面向用户的 `README.md`。
+
 ## 动作对齐与长期身份
 
 - 每次记录都必须先做动作对齐，不能直接用本次字面名称创建记录。解析时同时检查动作词典的规范名/别名和历史日志的 `reported_name`；历史中已确认过的不同叫法也应优先复用原 `exercise_id`。
