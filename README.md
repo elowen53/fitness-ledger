@@ -1,127 +1,78 @@
 # fitness-ledger
 
-一个极简、Git 原生的力量训练记录工程。它把 Codex（或其他代码 Agent）当作自然语言入口，把结构化文本文件当作数据库。
+一个以自然语言记录力量训练、以 Git 保存长期事实的个人训练账本。
 
-## 它解决什么
+使用者只需要告诉 Codex（或其他代码 Agent）自己完成了什么训练。动作名称对齐、数据校验、结构化存储和词典维护都由 Agent 处理，不需要手动操作脚本或编辑数据文件。
 
-同一个动作常有很多名字，但“名字相似”不代表“数据可直接比较”。本项目把一条动作记录拆成三层：
+## 它解决什么问题
 
-1. **动作身份**：`machine_chest_press`（器械推胸）
-2. **动作变体**：`angle=incline`、`posture=seated`、`laterality=bilateral`
-3. **具体器械**：如 `Life Fitness / Insignia Chest Press`
+同一个动作可能有简称、品牌叫法或中英文名称，但“名字相似”不代表训练数据可以直接比较。本项目把每条动作记录拆成三层：
 
-因此“上斜器械推胸”和“坐姿胸推机”可以归到同一动作家族做总量统计，同时按角度和器械分别比较表现。
+1. **动作身份**：例如“器械推胸”
+2. **动作变体**：例如上斜、坐姿、双侧、对握
+3. **具体器械**：例如某个品牌或机型
 
-对于“Y举”这类没有统一叫法的动作，系统不会为了匹配词典而硬套名称。Agent 会先确认主要训练部位，必要时补问器械、姿势或运动轨迹；确认后把它保存为用户自定义动作。自定义动作和传统动作在记录、统计上地位相同，只是定义来源可追溯。
+这样，“上斜器械推胸”和“坐姿胸推机”可以归入同一动作家族，同时又不会把不同角度、器械和动作顺序下的重量表现误判为同一条进步曲线。
 
-## 每次记录先做动作对齐
+对于“Y举”这类没有统一名称的动作，系统不会强行套用传统动作名。Agent 会先确认主要训练部位，必要时询问器械、姿势或运动轨迹，再把它保存为可追溯的用户自定义动作。
 
-用户不需要每次使用完全相同的动作名称。解析器会同时查询 `catalog/exercises.json` 的规范名/别名和历史日志中的 `reported_name`，尽量把简称、品牌叫法或措辞变化对齐到已有的唯一 `exercise_id`。如果新叫法可能对应多个动作，Agent 会先展示候选并询问；只有确认无法归入已有动作后，才创建新 ID。
+## 怎么使用
 
-长期趋势默认按 `exercise_id + variant + equipment + sequence` 分组。同一基本动作可以跨叫法连续追踪，但不同角度、姿势、握法、单双侧、具体器械或顺序角色不会被误合并成同一条 PR 曲线。每条日志仍保留原始 `reported_name`，因此任何归一化决定都可以审计和纠正。
-
-## 为什么选这些文件
-
-- `catalog/exercises.json`：规范动作、别名、允许的变体。JSON 便于 Agent 和脚本可靠修改。
-- `data/workouts/YYYY/MM/YYYY-MM-DD.jsonl`：每行是一条动作记录。追加简单、Git 冲突小、可用任何语言分析。
-- `scripts/fitness.ps1`：Windows 自带 PowerShell 即可运行，无数据库、服务或第三方依赖。
-- `AGENTS.md`：告诉 Agent 如何理解、消歧、记录和维护词典。
-- `knowledge/`：带来源和版本记录的长期训练知识；肌肥大计划以 ACSM 2026 为当前原则。
-- `knowledge/exercise-order.md`：动作顺序对力量与肌肥大的证据，以及胸背日优先级模板。
-- `profile/training-preferences.json`：用户确认的长期训练偏好，例如胸背日优先肌群轮换。
-- 没有训练记录的日期按休息日处理，不创建空训练日志。
-
-## 最短使用路径
-
-直接对 Codex 说：
+直接用日常语言描述已经完成的训练，例如：
 
 > 记录今天训练：力健上斜推胸机，40kg 12次，45kg 10次两组，最后一组 RIR 1。
 
-Agent 会先解析动作，再调用脚本落盘。CLI 同时提供 Windows 与 macOS 版本，两者行为一致、共享同一数据格式；你也可以自己使用：
+Agent 会依次完成：
 
-```powershell
-# 看一个自然语言名称会被识别成什么
-powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 resolve -Exercise "力健上斜推胸机"
+1. 将你的叫法与动作词典及历史记录对齐。
+2. 在名称或重量含义不明确时向你确认。
+3. 按实际训练顺序保存动作、组数、次数、重量和 RIR。
+4. 校验记录，并简短回报最终写入的内容和采用的假设。
 
-# 12x40 表示 12 次 × 40 kg；@2 表示 RIR 2
-powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 add `
-  -Exercise "上斜器械推胸" `
-  -Sets "12x40@2","10x45@1","10x45@1" `
-  -Equipment "Life Fitness Insignia" `
-  -Notes "座椅 4 档"
+你不需要记住固定句式。日期、动作顺序、左右侧、热身组、计时组、器械、握法、动作质量变化等信息，都可以直接用自然语言说明。
 
-# 查看最近记录和汇总
-powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 recent -Limit 10
-powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 stats -Exercise "器械推胸"
+## 记录了什么
 
-# 修改词典后做一致性检查
-powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 validate
-```
+每次训练可以保存：
 
-```bash
-# macOS / Linux（系统自带 python3 即可，无需安装 PowerShell）
-./scripts/fitness.sh resolve --exercise "力健上斜推胸机"
+- 日期和训练内动作顺序
+- 动作、变体与具体器械
+- 工作组和热身组
+- 次数、重量、RIR 与计时组
+- 左右侧分别完成的数据
+- 标准日、渐进超负荷日或减载日
+- 动作质量、训练目的及其他备注
 
-# 12x40 表示 12 次 × 40 kg；@2 表示 RIR 2
-./scripts/fitness.sh add \
-  --exercise "上斜器械推胸" \
-  --sets "12x40@2","10x45@1","10x45@1" \
-  --equipment "Life Fitness Insignia" \
-  --notes "座椅 4 档"
+训练计划与完成事实严格分开：只有实际完成并由用户报告的训练才会进入训练日志。没有记录的日期视为休息日，不额外创建空记录。
 
-./scripts/fitness.sh recent --limit 10
-./scripts/fitness.sh stats --exercise "器械推胸"
-./scripts/fitness.sh validate
-```
+## 数据为什么可追溯
 
-计时组写作 `30s`，自重组写作 `12xbw`。`-WarmupCount 2` 会把前两组标成热身组。重量统一按 kg 存储。
+每条日志都会保留用户最初使用的动作名称，同时关联稳定的动作 ID。即使日后调整了规范名称，也能看到当时是如何描述和归类的。
 
-单侧动作可写成 `R:8x20,L:8x20,R:7x20,L:8x20`。没有写左右时，Agent 按双侧动作记录；写明左右时，每侧数据独立保存，并保留对应轮次。
+当一个叫法可能对应多个动作时，Agent 会先确认，不会静默猜测。新动作只有在排除现有动作并确认含义后才会加入词典。训练日志默认追加保存；历史事实需要纠错时，只修改已经明确定位的记录。
 
-器械品牌不进入动作别名。例如“豪斯特推胸”仍可保留为原始叫法，同时用 `-ResolveAs "器械推胸" -Equipment "HOIST"` 归一。窄距、宽距和对握等握法会作为独立变体参与统计分组。
+项目使用纯文本和 Git 保存数据，因此词典变化、训练记录和纠错过程都可以审查和回溯，不依赖专有数据库或在线服务。
 
-## 目录
+## 如何比较长期进步
 
-```text
-fitness-ledger/
-├── AGENTS.md
-├── catalog/exercises.json
-├── data/workouts/.gitkeep
-├── docs/data-model.md
-├── examples/example-workout.jsonl
-├── knowledge/hypertrophy-training.md
-├── scripts/fitness.ps1   # Windows（PowerShell）
-├── scripts/fitness.sh    # macOS / Linux（调用 fitness.py）
-├── scripts/fitness.py    # 跨平台 Python 实现（macOS / Linux）
-├── tests/smoke.ps1       # Windows 冒烟测试
-└── tests/smoke.sh        # macOS / Linux 冒烟测试
-```
+默认只有动作身份、变体、器械和训练顺序角色一致的数据才直接比较。跨角度、跨器械或不同优先级训练日的数据会被视为不同上下文，避免产生虚假的 PR 或退步判断。
 
-`scripts/fitness.py` 与 `scripts/fitness.ps1` 的命令、参数和输出保持一致：`resolve / add / resequence / recent / stats / list / validate`。PowerShell 风格参数（`-Exercise`）和 GNU 风格参数（`--exercise`）在 macOS 版中都可使用。
+本项目采用用户确认的个人渐进优先级：**动作质量 > 完成数量 > 工作重量**。如果用户明确说明动作质量显著改善，即使重量下降，也会建立新的质量基线，而不是简单判定为退步。
 
-## Git 工作流
+## 项目内容
 
-一次训练结束后：
-
-```powershell
-git diff
-git add data catalog
-git commit -m "workout: 2026-08-05 push"
-```
-
-动作词典的变更和训练记录可以分开提交，便于审查别名是否被错误合并。真实训练数据位于 `data/`，**应当提交到 Git**；不要把它加入 `.gitignore`。
+- `catalog/`：规范动作、别名和支持的变体
+- `data/workouts/`：按日期保存的实际训练记录
+- `profile/`：用户确认的长期训练偏好和轮换状态
+- `knowledge/`：带来源、适用范围和版本记录的训练知识
+- `docs/`：数据模型等项目文档
+- `AGENTS.md`：供 Agent 执行记录、消歧和维护任务时遵循的规则
+- `scripts/` 与 `tests/`：供 Agent 使用的自动化与一致性校验工具
 
 ## 当前边界
 
-第一版专注力量训练：次数、重量、RIR、计时组和热身标记。它不猜测左右两边重量的含义，也不自动换算器械配重片。如果一句话存在两种合理解释，Agent 应先询问，而不是静默写入错误数据。
+项目目前专注于力量训练事实，包括次数、重量、RIR、计时组、热身组、动作顺序和训练日类型。
 
-动作词典允许用户自定义动作，不要求每个动作都有国际统一名称。自定义动作在确认训练部位和最小动作定义之前不会落盘。
-## 训练日类型
+它不会擅自解释单侧器械的重量含义，不会自动换算器械配重，也不会把疼痛描述扩展成健康诊断。遇到存在多种合理解释的信息时，Agent 会先询问用户。
 
-新日志会保存 `day_type`：`standard`（标准/积累）、`overload`（渐进超负荷）或 `deload`（减载）。测试/PR 和技术练习使用 `tags` 或 `notes` 记录。例如：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\fitness.ps1 add -Exercise "器械推胸" -Sets "10x80","9x80" -DayType overload -DayTypeBasis planned -Notes "overload_lever=reps"
-```
-
-不要用单日 `重量×次数` 自动判断超负荷或减载；比较时需匹配动作、变体、器械和顺序角色。完整规则见 [`knowledge/training-day-types.md`](knowledge/training-day-types.md)。
+训练知识用于辅助设计和复盘，但会明确区分科学证据、项目启发式规则和用户个人事实。
