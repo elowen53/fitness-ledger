@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-25",
+  "day_status": "rest_day",
+  "applies_through": "2026-09-03",
+  "training_status": "paused",
+  "status_basis": "user_reported",
+  "reason": "双眼皮全切手术及恢复",
+  "notes": "用户报告 2026-08-25 至 2026-09-03（含首尾）停练。该区间不创建空训练日志；截至记录时尚未结束的日期表示用户报告的停练安排。"
+}
