@@ -100,4 +100,11 @@ print([r["volume_kg"] for r in rows if r.get("sequence") == 1][0])
 ' "$test_machine_stats")"
 expect_eq "$seq_one_volume" "930.0" "stats 顺序1训练量"
 
+report="$(run report --date 2026-08-06 --json)"
+expect_eq "$(json_get "$report" windows.0.working_set_entries)" "11" "report 工作组条数"
+expect_eq "$(json_get "$report" last_workout_date)" "2026-08-06" "report 截止日期"
+side_rounds="$(python3 -c 'import json,sys; print(next(m["working_rounds"] for m in json.loads(sys.argv[1])["windows"][0]["muscles"] if m["muscle"] == "side_delts"))' "$report")"
+expect_eq "$side_rounds" "4" "report 单侧工作轮次"
+expect_eq "$(json_get "$(run validate --json)" workout_records)" "6" "report 不写训练事实"
+
 echo "smoke tests passed"

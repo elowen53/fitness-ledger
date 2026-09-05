@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("resolve", "add", "resequence", "recent", "stats", "validate", "list")]
+    [ValidateSet("resolve", "add", "resequence", "recent", "stats", "report", "validate", "list")]
     [string]$Command,
 
     [string]$Exercise,
@@ -15,6 +15,11 @@ param(
     [string]$Laterality,
     [string]$Grip,
     [string]$Notes,
+    [string]$SessionTemplate,
+    [string]$ExecutionStandard,
+    [ValidateSet("maintained", "improved", "improved_with_load_reduction", "degraded")]
+    [string]$QualityChange,
+    [Nullable[double]]$RestSec,
     [string[]]$Tags,
     [ValidateSet("standard", "overload", "deload")]
     [string]$DayType = "standard",
@@ -27,6 +32,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "analysis.ps1")
 
 if (-not $ProjectRoot) {
     $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -224,7 +230,7 @@ function Parse-Set([string]$Spec, [bool]$Warmup) {
     throw "无法解析组 '$Spec'。使用 12x40@2、12xbw 或 30s。"
 }
 
-function Read-WorkoutRecords {
+function Read-WorkoutRecords([switch]$PreserveTimestamp) {
     if (-not (Test-Path -LiteralPath $WorkoutRoot)) { return @() }
     $records = @()
     $files = Get-ChildItem -LiteralPath $WorkoutRoot -Recurse -File -Filter "*.jsonl"
@@ -235,6 +241,11 @@ function Read-WorkoutRecords {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             try {
                 $record = $line | ConvertFrom-Json
+                # Report windows use the recorded civil date, not the host timezone.
+                # Older PowerShell versions automatically convert JSON ISO timestamps.
+                if ($PreserveTimestamp -and $line -match '"performed_at"\s*:\s*"([0-9T:Z.+-]+)"') {
+                    $record.performed_at = $Matches[1]
+                }
                 $records += $record
             } catch {
                 throw "无效 JSONL: $($file.FullName):$lineNumber"
@@ -277,7 +288,22 @@ switch ($Command) {
         break
     }
 
+    "report" {
+        $asOf = if ($Date) { $Date } else { [datetime]::Now.ToString('yyyy-MM-dd') }
+        $report = Build-TrainingReport @(Read-WorkoutRecords -PreserveTimestamp) (Read-Catalog) $asOf
+        ConvertTo-Json -InputObject $report -Depth 30 -Compress:$Json
+        break
+    }
     "add" {
+        $context = [ordered]@{}
+        foreach ($pair in @(
+            @('SessionTemplate', 'session_template'), @('ExecutionStandard', 'execution_standard'),
+            @('QualityChange', 'quality_change'), @('RestSec', 'rest_sec'))) {
+            if ($PSBoundParameters.ContainsKey($pair[0])) { $context[$pair[1]] = $PSBoundParameters[$pair[0]] }
+        }
+        $contextErrors = @(Get-ContextErrors $context)
+        if ($contextErrors.Count -gt 0) { throw ($contextErrors -join '; ') }
+
         if (-not $Sets -or $Sets.Count -eq 0) { throw "需要至少一个 -Sets 值。" }
         # powershell.exe -File may pass comma-separated values as one string.
         # Accept both a real string array and comma-separated CLI input.
@@ -342,6 +368,8 @@ switch ($Command) {
             notes = if ($Notes) { $Notes } else { $null }
             tags = @($Tags | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         }
+
+        if ($context.Count -gt 0) { $record['analysis_context'] = $context }
 
         $directory = Join-Path (Join-Path $WorkoutRoot $performed.ToString("yyyy")) $performed.ToString("MM")
         [void][IO.Directory]::CreateDirectory($directory)
@@ -488,6 +516,7 @@ switch ($Command) {
         $dayTypeByDate = @{}
         $allowedDayTypes = @("standard", "overload", "deload")
         foreach ($record in $records) {
+            foreach ($contextError in @(Get-ContextErrors $record.analysis_context)) { $errors += "$($record.id): $contextError" }
             if ($record.schema_version -ne 1) { $errors += "记录 $($record.id) schema_version 不是 1" }
             if (-not $ids.ContainsKey([string]$record.exercise_id)) { $errors += "记录 $($record.id) 引用了未知动作 $($record.exercise_id)" }
             if (@($record.sets).Count -eq 0) { $errors += "记录 $($record.id) 没有训练组" }

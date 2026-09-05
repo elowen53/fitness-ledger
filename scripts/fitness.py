@@ -6,7 +6,7 @@ fitness.py - cross-platform CLI for the fitness ledger (macOS / Linux).
 Mirrors scripts/fitness.ps1 command-for-command, so the ledger can be
 maintained identically from Windows (PowerShell) and macOS (Python 3).
 
-Commands: resolve, add, resequence, recent, stats, list, validate
+Commands: resolve, add, resequence, recent, stats, report, list, validate
 
 Example (macOS):
     ./scripts/fitness.sh add --exercise "上斜器械推胸" \
@@ -23,6 +23,7 @@ import re
 import sys
 import uuid
 from datetime import datetime
+from analysis import build_report, context_errors, QUALITY_CHANGES
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +313,12 @@ def assert_variant_allowed(catalog_item, field, value):
 # ---------------------------------------------------------------------------
 
 def command_add(args):
+    context = {key: value for key, value in (
+        ('session_template', args.session_template), ('execution_standard', args.execution_standard),
+        ('quality_change', args.quality_change), ('rest_sec', args.rest_sec)) if value is not None}
+    errors = context_errors(context)
+    if errors:
+        raise SystemExit('; '.join(errors))
     sets = []
     for set_value in args.sets or []:
         for piece in re.split(r"[,，]", set_value):
@@ -392,6 +399,9 @@ def command_add(args):
         "notes": args.notes if args.notes else None,
         "tags": [t for t in (args.tags or []) if t.strip()],
     }
+
+    if context:
+        record['analysis_context'] = context
 
     directory = os.path.join(args.workout_root, performed.strftime("%Y"), performed.strftime("%m"))
     os.makedirs(directory, exist_ok=True)
@@ -648,6 +658,7 @@ def command_validate(args):
     allowed_day_types = ("standard", "overload", "deload")
     for record in records:
         record_id = record.get("id")
+        errors.extend('%s: %s' % (record_id, error) for error in context_errors(record.get('analysis_context')))
         if record.get("schema_version") != 1:
             errors.append("记录 %s schema_version 不是 1" % record_id)
         if record.get("exercise_id") not in ids:
@@ -712,6 +723,10 @@ def build_parser():
         p.add_argument("--laterality", "--Laterality", dest="laterality", default=None, help="bilateral/unilateral/alternating")
         p.add_argument("--grip", "--Grip", dest="grip", default=None, help="narrow/wide/neutral/narrow_neutral")
         p.add_argument("--notes", "--Notes", dest="notes", default=None, help="备注")
+        p.add_argument("--session-template", "--SessionTemplate", dest="session_template", default=None, help="已确认的训练模板标识（可选）")
+        p.add_argument("--execution-standard", "--ExecutionStandard", dest="execution_standard", default=None, help="已确认的执行标准版本（可选）")
+        p.add_argument("--quality-change", "--QualityChange", dest="quality_change", choices=QUALITY_CHANGES, default=None, help="用户明确报告的质量状态（可选）")
+        p.add_argument("--rest-sec", "--RestSec", dest="rest_sec", type=float, default=None, help="当次实际统一组间休息秒数（可选）")
         p.add_argument("--tags", "--Tags", dest="tags", nargs="+", default=None, help="标签")
         p.add_argument("--day-type", "--DayType", dest="day_type", default="standard",
                        choices=("standard", "overload", "deload"), help="standard/overload/deload")
@@ -724,7 +739,7 @@ def build_parser():
         p.add_argument("--project-root", "--ProjectRoot", dest="project_root", default=PROJECT_ROOT,
                        help="仓库根目录(默认脚本上级目录)")
 
-    for name in ("resolve", "add", "resequence", "recent", "stats", "validate", "list"):
+    for name in ("resolve", "add", "resequence", "recent", "stats", "report", "validate", "list"):
         p = sub.add_parser(name, help="fitness %s" % name)
         add_common(p)
     return parser
@@ -750,6 +765,13 @@ def main(argv=None):
         command_resequence(args)
     elif args.command == "stats":
         command_stats(args)
+    elif args.command == "report":
+        try:
+            result = build_report(read_workout_records(args.workout_root), read_catalog(args.catalog_path),
+                                  args.date or now_local().strftime('%Y-%m-%d'))
+        except ValueError as error:
+            raise SystemExit(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=None if args.json else 2))
     elif args.command == "list":
         command_list(args)
     elif args.command == "validate":
