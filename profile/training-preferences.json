@@ -1,6 +1,16 @@
 {
   "schema_version": 1,
   "recording_preferences": {
+    "information_collection": {
+      "mode": "agent_led_dialogue",
+      "one_question_at_a_time": true,
+      "ask_only_missing_information": true,
+      "reuse_confirmed_preferences": true,
+      "optional_information_can_be_skipped": true,
+      "meaning": "通过 Agent 与用户逐轮问答补充训练信息；先问必要缺口，再按相关性补充可选信息，不改变已有动作记录原则。",
+      "status": "user_confirmed",
+      "confirmed_on": "2026-09-05"
+    },
     "exercise_alignment": {
       "required_before_write": true,
       "match_sources": ["catalog", "workout_history"],
