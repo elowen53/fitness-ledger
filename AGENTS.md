@@ -13,15 +13,15 @@
 
 ## 每次记录必须遵循的流程
 
-1. 读取 `catalog/exercises.json`，或调用 `scripts/fitness.ps1 resolve -Exercise <原始叫法> -Json`。
+1. 读取 `catalog/exercises.json`，或调用 `scripts/fitness.sh resolve --exercise <原始叫法> --json`。
 2. 将动作拆成：规范动作 `exercise_id`、变体、具体器械。不要为每个品牌或角度创建新的规范动作。
 3. 只有在结果唯一且语义合理时才写入。脚本返回 `ambiguous` 或 `unknown` 时，先向用户确认。
-4. 使用脚本写入，不要手工拼 JSONL。Windows 用 `scripts/fitness.ps1 add`，macOS / Linux 用 `scripts/fitness.sh add`（等价于 `scripts/fitness.py add`）。两个实现共享同一词典与数据格式，行为和校验规则一致。始终保留用户原话到 `reported_name`。
+4. 使用脚本写入，不要手工拼 JSONL。macOS 使用 `scripts/fitness.sh add`（调用 `scripts/fitness.py add`）。始终保留用户原话到 `reported_name`。
 5. 严格按用户报告的先后顺序写入 `sequence`。即使某动作因等待确认而稍后补写，也必须保留它在原训练中的位置，不能使用落盘时间代替动作顺序。
-6. 写入后运行 `validate`（Windows：`scripts/fitness.ps1 validate`；macOS / Linux：`scripts/fitness.sh validate`）。若本轮包含多条动作，全部完成后再运行一次即可。
+6. 写入后运行 `validate`（`scripts/fitness.sh validate`）。若本轮包含多条动作，全部完成后再运行一次即可。
 7. 简短回报日期、规范动作、变体、器械、顺序和组数；指出任何采用的假设。不要自动提交 Git，除非用户明确要求。
 
-> 平台说明：`scripts/fitness.py` 是 `scripts/fitness.ps1` 的跨平台镜像实现（macOS / Linux 用系统自带 python3 运行），新功能或规则变更必须同时更新两个脚本，并通过 `tests/smoke.ps1` 与 `tests/smoke.sh` 验证。
+> 平台说明：本仓库仅维护 macOS 环境，以 `scripts/fitness.sh` 为入口，使用 Python 3 标准库实现。新功能或规则变更必须通过 `bash tests/smoke.sh` 和 `python3 -m unittest discover -s tests -p 'test_*.py'` 验证。
 
 脚本命令、参数、组格式和常用调用示例集中记录在 `docs/agent-cli.md`。需要查询 CLI 用法时读取该文档，不要依赖面向用户的 `README.md`。
 
@@ -72,7 +72,7 @@
 - 未说明单位的配重默认 kg，但在回报中明确这一假设。
 - 已确认的重量口径使用 `weight_basis`（单只、每侧、合计或器械标示）保存；不同口径分开统计，未知口径不猜测。
 - 单侧器械若用户只报一个数字，不猜测这是“每侧”还是“总重”；需要确认，或把解释写进 `notes`。
-- 热身组通过 `-WarmupCount` 标记，不计入默认训练量统计。
+- 热身组通过 `--warmup-count` 标记，不计入默认训练量统计。
 - 失败组可记录实际完成次数；额外语义写入 `notes`，不捏造 RIR。
 - 用户已确认所有工作组均练至力竭：未报告 RIR 时由脚本按 profile 默认记录 `rir=0` 并保留 `rir_source=profile_default`，不再询问或留空（2026-08-18 确认，见 `profile/training-preferences.json` 的 `recording_preferences.rir_default`）。
 
@@ -91,7 +91,7 @@
 - 只有用户确认某叫法的含义后，才把它加入 `aliases`。
 - 别名必须在整个词典中唯一；运行 `validate` 检查。
 - 品牌名、健身房自定义编号和座椅档位通常属于 `equipment` 或 `notes`，不是别名。
-- 当原始叫法含品牌或临时描述、但动作身份已由上下文唯一确认时，使用 `add -Exercise <原话> -ResolveAs <规范动作名>`；这样既保留 `reported_name`，也不污染别名。
+- 当原始叫法含品牌或临时描述、但动作身份已由上下文唯一确认时，使用 `add --exercise <原话> --resolve-as <规范动作名>`；这样既保留 `reported_name`，也不污染别名。
 - 若新动作无法归入现有 `exercise_id`，添加稳定的英文 snake_case ID、中文规范名、动作模式、主要肌群、器械类型、别名及支持的变体。
 - 自定义动作不要求存在国际通用英文名。ID 只需稳定、可读；不要为了显得标准而编造“官方名称”。
 - `primary_muscles` 使用现有英文肌群词汇；常用值包括 `front_delts`、`side_delts`、`rear_delts`、`chest`、`lats`、`back`、`biceps`、`triceps`、`quads`、`hamstrings`、`glutes`。无法准确映射时先询问，不自行提升解剖精度。

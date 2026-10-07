@@ -1,4 +1,4 @@
-"""Read-only training analysis. Mirrored by analysis.ps1; no inferred facts."""
+"""Read-only training analysis; no inferred facts."""
 from datetime import datetime, timedelta
 import json
 import math

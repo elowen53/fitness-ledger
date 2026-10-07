@@ -1,4 +1,4 @@
-"""Ledger invariants shared by pre-write checks and validate; see validation.ps1."""
+"""Ledger invariants shared by pre-write checks and validate."""
 import math
 import re
 from datetime import datetime

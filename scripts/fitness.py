@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fitness.py - cross-platform CLI for the fitness ledger (macOS / Linux).
-
-Mirrors scripts/fitness.ps1 command-for-command, so the ledger can be
-maintained identically from Windows (PowerShell) and macOS (Python 3).
+fitness.py - macOS CLI for the fitness ledger, using Python 3.
 
 Commands: resolve, add, resequence, recent, stats, report, list, validate
 
@@ -13,7 +10,6 @@ Example (macOS):
         --sets "12x40@2","10x45@1" --equipment "Life Fitness Insignia" \
         --notes "座椅 4 档" --sequence 1
 
-PowerShell-style flags (-Exercise, -Sets ...) are accepted too.
 """
 
 import argparse
@@ -39,8 +35,7 @@ WORKOUT_ROOT = os.path.join(PROJECT_ROOT, "data", "workouts")
 
 
 # ---------------------------------------------------------------------------
-# Variant words (mirrors $VariantWords in fitness.ps1; PowerShell -match is
-# case-insensitive, so we use re.IGNORECASE)
+# Case-insensitive variant words extracted from reported exercise names.
 # ---------------------------------------------------------------------------
 
 VARIANT_WORDS = [
@@ -280,7 +275,7 @@ def parse_set(spec, warmup):
 # ---------------------------------------------------------------------------
 
 def iso7(dt):
-    """Format a tz-aware datetime like PowerShell's 'o' (7 fractional digits)."""
+    """Format a timezone-aware ISO timestamp with 7 fractional digits."""
     return dt.strftime('%Y-%m-%dT%H:%M:%S.') + ('%06d0' % dt.microsecond) + dt.strftime('%z')[:3] + ':' + dt.strftime('%z')[3:]
 
 
@@ -692,37 +687,37 @@ def command_validate(args):
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="fitness",
-        description="fitness-ledger 跨平台 CLI(macOS/Linux 版;Windows 请用 fitness.ps1)。",
+        description="fitness-ledger macOS CLI（Python 3）。",
     )
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     def add_common(p):
-        p.add_argument("--exercise", "--Exercise", dest="exercise", default=None, help="动作原始叫法")
-        p.add_argument("--resolve-as", "--ResolveAs", dest="resolve_as", default=None, help="归一化到规范动作名")
-        p.add_argument("--sets", "--Sets", dest="sets", nargs="+", default=None, help="组,如 12x40@2")
-        p.add_argument("--date", "--Date", dest="date", default=None, help="训练日期 yyyy-MM-dd")
-        p.add_argument('--performed-at', '--PerformedAt', dest='performed_at', default=None, help='用户报告的实际训练时间（带时区，可选）')
-        p.add_argument('--weight-basis', '--WeightBasis', dest='weight_basis', choices=WEIGHT_BASES, default='unknown', help='已确认重量口径')
-        p.add_argument("--equipment", "--Equipment", dest="equipment", default=None, help="具体器械")
-        p.add_argument("--angle", "--Angle", dest="angle", default=None, help="flat/incline/decline/vertical")
-        p.add_argument("--posture", "--Posture", dest="posture", default=None, help="seated/standing/lying/kneeling")
-        p.add_argument("--laterality", "--Laterality", dest="laterality", default=None, help="bilateral/unilateral/alternating")
-        p.add_argument("--grip", "--Grip", dest="grip", default=None, help="narrow/wide/neutral/narrow_neutral")
-        p.add_argument("--notes", "--Notes", dest="notes", default=None, help="备注")
-        p.add_argument("--session-template", "--SessionTemplate", dest="session_template", default=None, help="已确认的训练模板标识（可选）")
-        p.add_argument("--execution-standard", "--ExecutionStandard", dest="execution_standard", default=None, help="已确认的执行标准版本（可选）")
-        p.add_argument("--quality-change", "--QualityChange", dest="quality_change", choices=QUALITY_CHANGES, default=None, help="用户明确报告的质量状态（可选）")
-        p.add_argument("--rest-sec", "--RestSec", dest="rest_sec", type=float, default=None, help="当次实际统一组间休息秒数（可选）")
-        p.add_argument("--tags", "--Tags", dest="tags", nargs="+", default=None, help="标签")
-        p.add_argument("--day-type", "--DayType", dest="day_type", default="standard",
+        p.add_argument("--exercise", dest="exercise", default=None, help="动作原始叫法")
+        p.add_argument("--resolve-as", dest="resolve_as", default=None, help="归一化到规范动作名")
+        p.add_argument("--sets", dest="sets", nargs="+", default=None, help="组,如 12x40@2")
+        p.add_argument("--date", dest="date", default=None, help="训练日期 yyyy-MM-dd")
+        p.add_argument('--performed-at', dest='performed_at', default=None, help='用户报告的实际训练时间（带时区，可选）')
+        p.add_argument('--weight-basis', dest='weight_basis', choices=WEIGHT_BASES, default='unknown', help='已确认重量口径')
+        p.add_argument("--equipment", dest="equipment", default=None, help="具体器械")
+        p.add_argument("--angle", dest="angle", default=None, help="flat/incline/decline/vertical")
+        p.add_argument("--posture", dest="posture", default=None, help="seated/standing/lying/kneeling")
+        p.add_argument("--laterality", dest="laterality", default=None, help="bilateral/unilateral/alternating")
+        p.add_argument("--grip", dest="grip", default=None, help="narrow/wide/neutral/narrow_neutral")
+        p.add_argument("--notes", dest="notes", default=None, help="备注")
+        p.add_argument("--session-template", dest="session_template", default=None, help="已确认的训练模板标识（可选）")
+        p.add_argument("--execution-standard", dest="execution_standard", default=None, help="已确认的执行标准版本（可选）")
+        p.add_argument("--quality-change", dest="quality_change", choices=QUALITY_CHANGES, default=None, help="用户明确报告的质量状态（可选）")
+        p.add_argument("--rest-sec", dest="rest_sec", type=float, default=None, help="当次实际统一组间休息秒数（可选）")
+        p.add_argument("--tags", dest="tags", nargs="+", default=None, help="标签")
+        p.add_argument("--day-type", dest="day_type", default="standard",
                        choices=("standard", "overload", "deload"), help="standard/overload/deload")
-        p.add_argument("--day-type-basis", "--DayTypeBasis", dest="day_type_basis", default="default", help="day_type 依据")
-        p.add_argument("--sequence", "--Sequence", dest="sequence", type=int, default=0, help="训练内动作顺序(1 起)")
-        p.add_argument("--warmup-count", "--WarmupCount", dest="warmup_count", type=int, default=0, help="前 N 组为热身")
-        p.add_argument("--limit", "--Limit", dest="limit", type=int, default=10, help="recent 条数")
-        p.add_argument("--json", "--Json", dest="json", action="store_true", help="输出 JSON")
-        p.add_argument("--id", "--Id", dest="id", default=None, help="记录 ID(resequence 用)")
-        p.add_argument("--project-root", "--ProjectRoot", dest="project_root", default=PROJECT_ROOT,
+        p.add_argument("--day-type-basis", dest="day_type_basis", default="default", help="day_type 依据")
+        p.add_argument("--sequence", dest="sequence", type=int, default=0, help="训练内动作顺序(1 起)")
+        p.add_argument("--warmup-count", dest="warmup_count", type=int, default=0, help="前 N 组为热身")
+        p.add_argument("--limit", dest="limit", type=int, default=10, help="recent 条数")
+        p.add_argument("--json", dest="json", action="store_true", help="输出 JSON")
+        p.add_argument("--id", dest="id", default=None, help="记录 ID(resequence 用)")
+        p.add_argument("--project-root", dest="project_root", default=PROJECT_ROOT,
                        help="仓库根目录(默认脚本上级目录)")
 
     for name in ("resolve", "add", "resequence", "recent", "stats", "report", "validate", "list"):
@@ -733,7 +728,7 @@ def build_parser():
 
 @contextmanager
 def write_lock(root):
-    """Both runtimes use the same exclusive file; never steal a stale lock."""
+    """Serialize ledger writes with an exclusive file; never steal a stale lock."""
     path = os.path.join(root, '.fitness-write.lock')
     try:
         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)

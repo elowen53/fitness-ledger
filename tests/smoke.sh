@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Smoke tests for the macOS / Linux CLI (scripts/fitness.py).
-# Mirrors the assertions in tests/smoke.ps1. Run from anywhere:
+# Smoke tests for the macOS CLI (scripts/fitness.py). Run from anywhere:
 #   bash tests/smoke.sh
 set -euo pipefail
 

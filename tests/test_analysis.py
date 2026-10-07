@@ -1,7 +1,6 @@
-"""Read-only analysis regression tests; optional native PowerShell parity."""
+"""Read-only analysis and macOS CLI regression tests."""
 import copy
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -118,42 +117,34 @@ class AnalysisTests(unittest.TestCase):
 
     def test_add_context_keeps_existing_recording_semantics(self):
         import shutil
-        runtimes = [[sys.executable, str(ROOT/'scripts/fitness.py')]]
-        if os.environ.get('PWSH'):
-            runtimes.append([os.environ['PWSH'], '-NoProfile', '-File', str(ROOT/'scripts/fitness.ps1')])
-        for runtime in runtimes:
-            with tempfile.TemporaryDirectory() as d:
-                (Path(d)/'catalog').mkdir()
-                shutil.copyfile(ROOT/'catalog/exercises.json', Path(d)/'catalog/exercises.json')
-                ps = runtime[0] != sys.executable
-                def invoke(options):
-                    if ps:
-                        options = ['-'+''.join(w.title() for w in a[2:].split('-')) if a.startswith('--') else a for a in options]
-                    return subprocess.run(runtime+options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                common = ['add', '--exercise', 'Y举', '--sets', 'R:8x20@0,L:7x20@1', '--laterality', 'unilateral', '--sequence', '3', '--date', '2026-09-05', '--project-root', d, '--json']
-                result = invoke(common)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                old = json.loads(result.stdout)
-                self.assertNotIn('analysis_context', old)
-                # Use a separate training date; duplicate slots are now rejected before write.
-                updated = list(common)
-                updated[updated.index('--date') + 1] = '2026-09-06'
-                result = invoke(updated+['--session-template', '肩日', '--execution-standard', '座椅4-全幅-v2', '--quality-change', 'improved_with_load_reduction', '--rest-sec', '180', '--notes', '用户报告质量显著改善而降重'])
-                self.assertEqual(result.returncode, 0, result.stderr)
-                new = json.loads(result.stdout)
-                self.assertEqual(new['sets'], old['sets'])
-                for key in ['exercise_id','reported_name','sequence','variant','equipment','day_type']:
-                    self.assertEqual(new[key], old[key])
-                self.assertEqual(new['sets'][0]['rir'], 0)
-                self.assertEqual(new['sets'][1]['rir'], 1)
-                self.assertEqual(new['analysis_context']['rest_sec'], 180)
-                files = {f: f.read_bytes() for f in (Path(d)/'data').rglob('*.jsonl')}
-                for bad in [['--rest-sec', '-1'], ['--session-template', ' '], ['--quality-change', 'guessed']]:
-                    self.assertNotEqual(invoke(common+bad).returncode, 0)
-                    self.assertEqual(files, {f: f.read_bytes() for f in files})
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d)/'catalog').mkdir()
+            shutil.copyfile(ROOT/'catalog/exercises.json', Path(d)/'catalog/exercises.json')
+            def invoke(options):
+                return subprocess.run([sys.executable, str(ROOT/'scripts/fitness.py')]+options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            common = ['add', '--exercise', 'Y举', '--sets', 'R:8x20@0,L:7x20@1', '--laterality', 'unilateral', '--sequence', '3', '--date', '2026-09-05', '--project-root', d, '--json']
+            result = invoke(common)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            old = json.loads(result.stdout)
+            self.assertNotIn('analysis_context', old)
+            # Use a separate training date; duplicate slots are now rejected before write.
+            updated = list(common)
+            updated[updated.index('--date') + 1] = '2026-09-06'
+            result = invoke(updated+['--session-template', '肩日', '--execution-standard', '座椅4-全幅-v2', '--quality-change', 'improved_with_load_reduction', '--rest-sec', '180', '--notes', '用户报告质量显著改善而降重'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            new = json.loads(result.stdout)
+            self.assertEqual(new['sets'], old['sets'])
+            for key in ['exercise_id','reported_name','sequence','variant','equipment','day_type']:
+                self.assertEqual(new[key], old[key])
+            self.assertEqual(new['sets'][0]['rir'], 0)
+            self.assertEqual(new['sets'][1]['rir'], 1)
+            self.assertEqual(new['analysis_context']['rest_sec'], 180)
+            files = {f: f.read_bytes() for f in (Path(d)/'data').rglob('*.jsonl')}
+            for bad in [['--rest-sec', '-1'], ['--session-template', ' '], ['--quality-change', 'guessed']]:
+                self.assertNotEqual(invoke(common+bad).returncode, 0)
+                self.assertEqual(files, {f: f.read_bytes() for f in files})
 
-    @unittest.skipUnless(os.environ.get('PWSH'), 'Set PWSH for native platform parity')
-    def test_native_platform_parity_and_immutable_files(self):
+    def test_cli_report_dates_and_immutable_files(self):
         rows = [record('2026-09-01'), record('2026-09-05', reps=(11, 8))]
         rows += [record('2026-08-30', exercise_id='raise', analysis_context=None, notes='动作优化')]
         rows[0]['sets'][0]['weight_kg'] = 40.0
@@ -181,8 +172,7 @@ class AnalysisTests(unittest.TestCase):
             before = f.read_bytes()
             for day in ['2026-09-05', '2026-08-01', '2026-10-01']:
                 py = subprocess.check_output([sys.executable, str(ROOT/'scripts/fitness.py'), 'report', '--date', day, '--project-root', d, '--json'])
-                ps = subprocess.check_output([os.environ['PWSH'], '-NoProfile', '-File', str(ROOT/'scripts/fitness.ps1'), 'report', '-Date', day, '-ProjectRoot', d, '-Json'])
-                self.assertEqual(json.loads(py), json.loads(ps))
+                self.assertEqual(json.loads(py), build_report(rows, CATALOG, day))
             self.assertEqual(before, f.read_bytes())
 
 
