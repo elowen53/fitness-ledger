@@ -22,15 +22,19 @@ function Get-ContextErrors($Context) {
 }
 
 function Get-RecordDate($Record) {
-    return ([datetimeoffset]$Record.performed_at).ToString('yyyy-MM-dd')
+    if ($Record.training_date) { return [string]$Record.training_date }
+    $stamp = [string]$Record.performed_at
+    return $stamp.Substring(0, [Math]::Min(10, $stamp.Length))
 }
+
+function Get-WeightBasis($Record) { if ($Record.weight_basis) { return $Record.weight_basis }; return 'unknown' }
 
 function Get-WorkSets($Record) { @($Record.sets | Where-Object { -not $_.warmup }) }
 
 function Get-BaseKey($Record) {
     return ,@($Record.exercise_id, $Record.variant.angle, $Record.variant.posture,
         $Record.variant.laterality, $Record.variant.grip, $Record.equipment.type,
-        $Record.equipment.name, $Record.sequence)
+        $Record.equipment.name, $Record.sequence, (Get-WeightBasis $Record))
 }
 
 function Get-SetMetrics($Record) {
@@ -59,7 +63,7 @@ function Get-SetMetrics($Record) {
 function Get-Snapshot($Record) {
     $r = [ordered]@{
         id = $Record.id; date = Get-RecordDate $Record; sequence = $Record.sequence
-        reported_name = $Record.reported_name; notes = $Record.notes
+        weight_basis = Get-WeightBasis $Record; reported_name = $Record.reported_name; notes = $Record.notes
         analysis_context = $Record.analysis_context; sets = @(Get-WorkSets $Record)
     }
     $metrics = Get-SetMetrics $Record
@@ -130,6 +134,7 @@ function Compare-Training($Latest, $Previous, $Records) {
         if ($a.Count -eq 0 -or $b.Count -eq 0 -or @($both | Where-Object { $null -eq $_.rir }).Count -gt 0) { $reasons += 'effort_unknown' }
         if (@($both | Where-Object { $null -eq $_.reps }).Count -gt 0) { $reasons += 'rep_measurement_unavailable' }
         if (@($both | Where-Object { $null -eq $_.weight_kg -and -not $_.bodyweight }).Count -gt 0) { $reasons += 'load_unknown' }
+        if (@($both | Where-Object { $null -ne $_.weight_kg }).Count -gt 0 -and ((Get-WeightBasis $Latest) -eq 'unknown' -or (Get-WeightBasis $Previous) -eq 'unknown')) { $reasons += 'weight_basis_unknown' }
         if (@($both | Where-Object { $_.bodyweight }).Count -gt 0) { $reasons += 'bodyweight_load_untracked' }
         $aa = @($a | ForEach-Object { ,@($_.side, $_.round, $_.weight_kg, $_.bodyweight, $_.duration_sec, $_.rir) })
         $bb = @($b | ForEach-Object { ,@($_.side, $_.round, $_.weight_kg, $_.bodyweight, $_.duration_sec, $_.rir) })

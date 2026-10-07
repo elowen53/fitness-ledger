@@ -9,6 +9,9 @@ param(
     [string]$ResolveAs,
     [string[]]$Sets,
     [string]$Date,
+    [string]$PerformedAt,
+    [ValidateSet('unknown','per_implement','per_side','total','machine_display')]
+    [string]$WeightBasis = 'unknown',
     [string]$Equipment,
     [string]$Angle,
     [string]$Posture,
@@ -33,6 +36,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "analysis.ps1")
+. (Join-Path $PSScriptRoot "validation.ps1")
 
 if (-not $ProjectRoot) {
     $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -243,8 +247,8 @@ function Read-WorkoutRecords([switch]$PreserveTimestamp) {
                 $record = $line | ConvertFrom-Json
                 # Report windows use the recorded civil date, not the host timezone.
                 # Older PowerShell versions automatically convert JSON ISO timestamps.
-                if ($PreserveTimestamp -and $line -match '"performed_at"\s*:\s*"([0-9T:Z.+-]+)"') {
-                    $record.performed_at = $Matches[1]
+                foreach ($field in @('performed_at','recorded_at','training_date')) {
+                    if ($line -match ('"' + $field + '"\s*:\s*"([0-9T:Z.+-]+)"')) { $record.$field = $Matches[1] }
                 }
                 $records += $record
             } catch {
@@ -257,7 +261,7 @@ function Read-WorkoutRecords([switch]$PreserveTimestamp) {
 
 function Write-OutputObject($Object) {
     if ($Json) {
-        $Object | ConvertTo-Json -Depth 12
+        ConvertTo-Json -InputObject $Object -Depth 12
     } else {
         $Object
     }
@@ -271,6 +275,13 @@ function Assert-VariantAllowed($CatalogItem, [string]$Field, [string]$Value) {
     }
 }
 
+$lockStream = $null
+$lockPath = Join-Path $ProjectRoot '.fitness-write.lock'
+if ($Command -in @('add','resequence')) {
+    try { $lockStream = [IO.File]::Open($lockPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None) }
+    catch { throw '账本正在写入，或存在遗留 .fitness-write.lock；确认没有写入进程后重试。' }
+}
+try {
 switch ($Command) {
     "resolve" {
         $result = Resolve-Exercise $Exercise
@@ -320,40 +331,52 @@ switch ($Command) {
         }
         $catalog = Read-Catalog
         $catalogItem = $catalog.exercises | Where-Object { $_.id -eq $resolution.exercise.id } | Select-Object -First 1
-        $finalAngle = if ($Angle) { $Angle } else { $resolution.variant.angle }
-        $finalPosture = if ($Posture) { $Posture } else { $resolution.variant.posture }
-        $finalLaterality = if ($Laterality) { $Laterality } else { $resolution.variant.laterality }
-        $finalGrip = if ($Grip) { $Grip } elseif ($ResolveAs) { (Get-Variant $Exercise).grip } else { $resolution.variant.grip }
+        $variant = Get-Variant $Exercise
+        $finalAngle = if ($Angle) { $Angle } else { $variant.angle }
+        $finalPosture = if ($Posture) { $Posture } else { $variant.posture }
+        $finalGrip = if ($Grip) { $Grip } else { $variant.grip }
+        $parsedSets = @(for ($i = 0; $i -lt $Sets.Count; $i++) { Parse-Set $Sets[$i] ($i -lt $WarmupCount) })
+        $sided = @($parsedSets | Where-Object { $_.side }).Count -gt 0
+        $finalLaterality = if ($Laterality) { $Laterality } elseif ($variant.laterality) { $variant.laterality } elseif ($sided) { 'unilateral' } else { 'bilateral' }
         Assert-VariantAllowed $catalogItem "angle" $finalAngle
         Assert-VariantAllowed $catalogItem "posture" $finalPosture
         Assert-VariantAllowed $catalogItem "laterality" $finalLaterality
-
-        if ($Date) {
-            $parsedDate = [datetime]::MinValue
-            if (-not [datetime]::TryParseExact($Date, "yyyy-MM-dd", [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$parsedDate)) {
-                throw "Date 必须是 yyyy-MM-dd。"
-            }
-            $now = [datetimeoffset]::Now
-            $performed = [datetimeoffset]::new($parsedDate.Year, $parsedDate.Month, $parsedDate.Day, $now.Hour, $now.Minute, $now.Second, $now.Offset)
-        } else {
-            $performed = [datetimeoffset]::Now
+        $now = [datetimeoffset]::Now
+        $trainingDate = if ($Date) { $Date } elseif ($PerformedAt -and $PerformedAt.Length -ge 10) { $PerformedAt.Substring(0,10) } else { $now.ToString('yyyy-MM-dd') }
+        if (-not (Test-LedgerDate $trainingDate)) { throw 'Date 必须是 yyyy-MM-dd。' }
+        if ($PerformedAt -and (-not (Test-LedgerTimestamp $PerformedAt) -or $PerformedAt.Substring(0,10) -cne $trainingDate)) { throw 'PerformedAt 必须包含时区且与 Date 一致。' }
+        if ($Sequence -lt 1) { throw '需要大于 0 的 -Sequence。' }
+        $default = $null
+        $profilePath = Join-Path $ProjectRoot 'profile/training-preferences.json'
+        if (Test-Path -LiteralPath $profilePath) {
+            $profile = Get-Content -LiteralPath $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $default = $profile.recording_preferences.rir_default
+            if ($null -ne $default -and (-not (Test-LedgerObject $default) -or $default.status -cne 'user_confirmed' -or -not (Test-LedgerNumber $default.missing_means))) { throw '无效的已确认 RIR 默认偏好。' }
         }
-
-        $parsedSets = @()
-        $sideRounds = @{ left = 0; right = 0 }
-        for ($i = 0; $i -lt $Sets.Count; $i++) {
-            $parsedSet = Parse-Set $Sets[$i] ($i -lt $WarmupCount)
+        $usedDefault = $false
+        $sideRounds = @{}
+        foreach ($parsedSet in $parsedSets) {
             if ($parsedSet.side) {
-                $sideRounds[$parsedSet.side]++
-                $parsedSet["round"] = $sideRounds[$parsedSet.side]
+                $key = "$($parsedSet.warmup)|$($parsedSet.side)"
+                if (-not $sideRounds.ContainsKey($key)) { $sideRounds[$key] = 0 }
+                $sideRounds[$key]++
+                $parsedSet['round'] = $sideRounds[$key]
             }
-            $parsedSets += $parsedSet
+            $parsedSet['rir_source'] = if ($null -ne $parsedSet.rir) { 'reported' } else { 'unknown' }
+            if ($null -eq $parsedSet.rir -and -not $parsedSet.warmup -and $null -ne $default) {
+                $parsedSet.rir = $default.missing_means
+                $parsedSet.rir_source = 'profile_default'
+                $usedDefault = $true
+            }
         }
         $shortId = [guid]::NewGuid().ToString("N").Substring(0, 6)
         $record = [ordered]@{
-            schema_version = 1
-            id = $performed.ToString("yyyyMMdd-HHmmss") + "-" + $shortId
-            performed_at = $performed.ToString("o")
+            schema_version = 2
+            id = $now.ToString("yyyyMMdd-HHmmss") + "-" + $shortId
+            training_date = $trainingDate
+            recorded_at = $now.ToString('o')
+            performed_at = if ($PerformedAt) { $PerformedAt } else { $null }
+            weight_basis = $WeightBasis
             day_type = $DayType
             day_type_basis = $DayTypeBasis
             sequence = if ($Sequence -gt 0) { $Sequence } else { $null }
@@ -369,17 +392,20 @@ switch ($Command) {
             tags = @($Tags | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         }
 
+        if ($usedDefault) { $record['rir_default'] = $default }
         if ($context.Count -gt 0) { $record['analysis_context'] = $context }
+        $recordErrors = @(Get-RecordErrors (@(Read-WorkoutRecords) + @($record)) $catalog)
+        if ($recordErrors.Count -gt 0) { throw ($recordErrors -join '; ') }
 
-        $directory = Join-Path (Join-Path $WorkoutRoot $performed.ToString("yyyy")) $performed.ToString("MM")
+        $directory = Join-Path (Join-Path $WorkoutRoot $trainingDate.Substring(0,4)) $trainingDate.Substring(5,2)
         [void][IO.Directory]::CreateDirectory($directory)
-        $path = Join-Path $directory ($performed.ToString("yyyy-MM-dd") + ".jsonl")
+        $path = Join-Path $directory ($trainingDate + ".jsonl")
         $line = $record | ConvertTo-Json -Compress -Depth 12
         [IO.File]::AppendAllText($path, $line + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
         if ($Json) { Write-OutputObject $record }
         else {
             Write-Host "已记录: $($catalogItem.canonical_name) [$($catalogItem.id)]"
-            Write-Host "日期: $($performed.ToString('yyyy-MM-dd'))；顺序: $($record.sequence)；组数: $($parsedSets.Count)；文件: $path"
+            Write-Host "日期: $trainingDate；顺序: $($record.sequence)；组数: $($parsedSets.Count)；文件: $path"
             Write-Host "变体: angle=$finalAngle, posture=$finalPosture, laterality=$finalLaterality, grip=$finalGrip；器械类型: $($record.equipment.type)；器械: $Equipment"
         }
         break
@@ -389,9 +415,9 @@ switch ($Command) {
         $catalog = Read-Catalog
         $nameMap = @{}
         foreach ($item in $catalog.exercises) { $nameMap[$item.id] = $item.canonical_name }
-        $rows = Read-WorkoutRecords | Sort-Object performed_at -Descending | Select-Object -First $Limit | ForEach-Object {
+        $rows = Read-WorkoutRecords | Sort-Object @{Expression={Get-RecordDate $_}; Descending=$true}, @{Expression={$null -eq $_.sequence}}, sequence, id | Select-Object -First $Limit | ForEach-Object {
             [pscustomobject]@{
-                date = ([datetimeoffset]$_.performed_at).ToString("yyyy-MM-dd")
+                date = Get-RecordDate $_
                 day_type = if ($_.day_type) { $_.day_type } else { "unclassified" }
                 sequence = $_.sequence
                 exercise = $nameMap[$_.exercise_id]
@@ -408,6 +434,12 @@ switch ($Command) {
     "resequence" {
         if ([string]::IsNullOrWhiteSpace($Id)) { throw "需要 -Id。" }
         if ($Sequence -lt 1) { throw "需要大于 0 的 -Sequence。" }
+        $records = @(Read-WorkoutRecords)
+        $targets = @($records | Where-Object { $_.id -ceq $Id })
+        if ($targets.Count -ne 1) { throw "记录 ID 不存在或重复: $Id" }
+        $targets[0] | Add-Member -NotePropertyName sequence -NotePropertyValue $Sequence -Force
+        $recordErrors = @(Get-RecordErrors $records (Read-Catalog))
+        if ($recordErrors.Count -gt 0) { throw ($recordErrors -join '; ') }
         $found = $false
         $files = Get-ChildItem -LiteralPath $WorkoutRoot -Recurse -File -Filter "*.jsonl"
         foreach ($file in $files) {
@@ -416,10 +448,10 @@ switch ($Command) {
             foreach ($line in (Get-Content -LiteralPath $file.FullName -Encoding UTF8)) {
                 if ([string]::IsNullOrWhiteSpace($line)) { continue }
                 $record = $line | ConvertFrom-Json
-                if ($record.id -eq $Id) {
+                if ($record.id -ceq $Id) {
                     if ($found) { throw "记录 ID 重复: $Id" }
                     $record | Add-Member -NotePropertyName sequence -NotePropertyValue $Sequence -Force
-                    $updatedLines += ($record | ConvertTo-Json -Compress -Depth 12)
+                    $updatedLines += ($targets[0] | ConvertTo-Json -Compress -Depth 12)
                     $changed = $true
                     $found = $true
                 } else {
@@ -427,7 +459,13 @@ switch ($Command) {
                 }
             }
             if ($changed) {
-                [IO.File]::WriteAllLines($file.FullName, $updatedLines, [Text.UTF8Encoding]::new($false))
+                $temporary = Join-Path $file.DirectoryName ('.resequence-' + [guid]::NewGuid().ToString('N'))
+                try {
+                    [IO.File]::WriteAllLines($temporary, $updatedLines, [Text.UTF8Encoding]::new($false))
+                    [IO.File]::Replace($temporary, $file.FullName, [NullString]::Value)
+                } finally {
+                    if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+                }
             }
         }
         if (-not $found) { throw "找不到记录: $Id" }
@@ -459,19 +497,21 @@ switch ($Command) {
                 variant = $variantKey
                 equipment = $equipmentName
                 sequence = $record.sequence
+                weight_basis = Get-WeightBasis $record
                 sessions = 1
                 sets = $workingSets.Count
                 reps = if ($reps) { $reps } else { 0 }
                 volume_kg = $volume
             }
         }
-        $rows = $expanded | Group-Object exercise_id, variant, equipment, sequence | ForEach-Object {
+        $rows = $expanded | Group-Object exercise_id, variant, equipment, sequence, weight_basis | ForEach-Object {
             $first = $_.Group[0]
             [pscustomobject]@{
                 exercise_id = $first.exercise_id
                 variant = $first.variant
                 equipment = $first.equipment
                 sequence = $first.sequence
+                weight_basis = $first.weight_basis
                 entries = ($_.Group | Measure-Object -Property sessions -Sum).Sum
                 sets = ($_.Group | Measure-Object -Property sets -Sum).Sum
                 reps = ($_.Group | Measure-Object -Property reps -Sum).Sum
@@ -512,34 +552,7 @@ switch ($Command) {
             }
         }
         $records = @(Read-WorkoutRecords)
-        $sequenceByDate = @{}
-        $dayTypeByDate = @{}
-        $allowedDayTypes = @("standard", "overload", "deload")
-        foreach ($record in $records) {
-            foreach ($contextError in @(Get-ContextErrors $record.analysis_context)) { $errors += "$($record.id): $contextError" }
-            if ($record.schema_version -ne 1) { $errors += "记录 $($record.id) schema_version 不是 1" }
-            if (-not $ids.ContainsKey([string]$record.exercise_id)) { $errors += "记录 $($record.id) 引用了未知动作 $($record.exercise_id)" }
-            if (@($record.sets).Count -eq 0) { $errors += "记录 $($record.id) 没有训练组" }
-            if ($null -ne $record.day_type -and $record.day_type -notin $allowedDayTypes) {
-                $errors += "记录 $($record.id) 的 day_type 无效: $($record.day_type)"
-            }
-            if ($null -ne $record.day_type) {
-                $recordDateForType = ([datetimeoffset]$record.performed_at).ToString("yyyy-MM-dd")
-                if ($dayTypeByDate.ContainsKey($recordDateForType) -and $dayTypeByDate[$recordDateForType] -ne $record.day_type) {
-                    $errors += "同一天混用 day_type $recordDateForType：$($dayTypeByDate[$recordDateForType]) / $($record.day_type)"
-                } else {
-                    $dayTypeByDate[$recordDateForType] = $record.day_type
-                }
-            }
-            if ($null -ne $record.sequence) {
-                if ([int]$record.sequence -lt 1) { $errors += "记录 $($record.id) 的 sequence 必须大于 0" }
-                $recordDate = ([datetimeoffset]$record.performed_at).ToString("yyyy-MM-dd")
-                $sequenceKey = "$recordDate|$($record.sequence)"
-                if ($sequenceByDate.ContainsKey($sequenceKey)) {
-                    $errors += "动作顺序冲突 $sequenceKey：$($sequenceByDate[$sequenceKey]) / $($record.id)"
-                } else { $sequenceByDate[$sequenceKey] = $record.id }
-            }
-        }
+        $errors += @(Get-RecordErrors $records $catalog)
         if ($errors.Count -gt 0) {
             $errors | ForEach-Object { Write-Error $_ }
             exit 1
@@ -549,4 +562,8 @@ switch ($Command) {
         else { Write-Host "校验通过: $($result.exercises) 个动作，$($result.workout_records) 条训练记录。" }
         break
     }
+}
+
+} finally {
+    if ($null -ne $lockStream) { $lockStream.Dispose(); [IO.File]::Delete($lockPath) }
 }

@@ -85,7 +85,7 @@ Windows 与 macOS / Linux 实现共享动作词典和数据格式，命令保持
 - `R:8x20` / `L:8x20`：右侧 / 左侧；脚本按同侧出现顺序保存 `round`
 - Windows 使用 `-WarmupCount 2`、macOS / Linux 使用 `--warmup-count 2`，将最前两组标记为热身组
 
-未报告 RIR 时，按 `profile/training-preferences.json` 的当前记录偏好处理。不要在脚本文档中硬编码可能变化的用户偏好。
+未报告 RIR 时，组格式不加 `@`；脚本读取 `profile/training-preferences.json` 已确认的默认偏好，只补工作组并保存 `rir_source=profile_default` 与偏好快照。用户当次明确报告 RIR 才使用 `@RIR`，保存为 `reported`。热身组不补默认值；没有已确认默认偏好时保持未知。不要把 Agent 自行补入的 `@0` 冒充当次报告。
 
 ## 常用参数
 
@@ -94,7 +94,9 @@ Windows 与 macOS / Linux 实现共享动作词典和数据格式，命令保持
 | 用户原始叫法 | `-Exercise` | `--exercise` |
 | 已确认的规范动作 | `-ResolveAs` | `--resolve-as` |
 | 训练组 | `-Sets` | `--sets` |
-| 日期 | `-Date` | `--date` |
+| 实际训练日期 | `-Date` | `--date` |
+| 实际训练时刻（可选，带时区） | `-PerformedAt` | `--performed-at` |
+| 重量口径 | `-WeightBasis` | `--weight-basis` |
 | 动作顺序 | `-Sequence` | `--sequence` |
 | 具体器械 | `-Equipment` | `--equipment` |
 | 角度 | `-Angle` | `--angle` |
@@ -118,9 +120,9 @@ Windows 与 macOS / Linux 实现共享动作词典和数据格式，命令保持
 
 - `resolve` 只有返回 `resolved` 且语义合理时才允许继续写入；`ambiguous` 或 `unknown` 必须先确认。
 - 品牌、机型或临时描述不应污染动作别名；含义已确认时用 `ResolveAs` 保留原话并归一。
-- `add` 必须显式保存真实训练顺序。多条记录全部写入后运行一次 `validate` 即可。
+- `add` 必须显式保存真实训练顺序，遗漏或重复时在写入前拒绝。多条记录全部写入后运行一次 `validate` 即可。
 - `resequence` 会重写包含目标记录的 JSONL 文件，只用于用户明确要求的最小纠错。
-- `stats` 默认按 `exercise_id + variant + equipment + sequence` 分组，跨组结果不能直接判定 PR 或退步。
+- `stats` 默认按 `exercise_id + variant + equipment + sequence + weight_basis` 分组，跨组结果不能直接判定 PR 或退步。
 - 不要把训练计划写入 `data/workouts/`，也不要自行提交 Git；是否提交或推送由用户明确授权。
 
 ## 训练分析
@@ -139,16 +141,26 @@ Windows 与 macOS / Linux 实现共享动作词典和数据格式，命令保持
 
 在现有 `add` 调用上，可选择增加 `--session-template "推日-A" --execution-standard "座椅4-全幅-v2" --quality-change maintained --rest-sec 180`；PowerShell 等价为 `-SessionTemplate "推日-A" -ExecutionStandard "座椅4-全幅-v2" -QualityChange maintained -RestSec 180`。只保存已确认的实际信息，不将处方填成完成事实。质量状态完整枚举见数据模型。
 
-Agent 读取报告后仍须检查原始 `notes`、当前 profile 与相关 `data/day-notes/`，按照 `knowledge/training-analysis.md` 做判断。报告既不从备注关键词自动判质量，也不重新询问已确认的默认 RIR；写入工作组时继续按当前偏好准备组格式。原 `stats` 接口和所有记录原则保持不变。
+Agent 读取报告后仍须检查原始 `notes`、当前 profile 与相关 `data/day-notes/`，按照 `knowledge/training-analysis.md` 做判断。报告既不从备注关键词自动判质量，也不重新询问已确认的默认 RIR；写入工作组时由脚本应用当前偏好，组格式只填写用户明确报告的 RIR。原 `stats` 接口和所有记录原则保持不变。
 
 ## 分析回归测试
 
 ```bash
 bash tests/smoke.sh
-python3 -m unittest discover -s tests -p test_analysis.py
+python3 -m unittest discover -s tests -p 'test_*.py'
 # 已有 PowerShell 时启用两端 JSON 和记录兼容性比较
-PWSH=/path/to/pwsh python3 -m unittest discover -s tests -p test_analysis.py
+PWSH=/path/to/pwsh python3 -m unittest discover -s tests -p 'test_*.py'
 pwsh -NoProfile -File tests/smoke.ps1
 ```
 
 测试只在临时目录写入模拟记录，不改真实账本。未设置 `PWSH` 时，跨平台对比用例明确标为跳过；Python 测试仍执行。
+
+## 版本 2 写入补充
+
+新记录自动保存 `training_date`、`recorded_at`；未知实际时刻的 `performed_at` 为 `null`。只在用户明确报告时传 `--performed-at '2026-10-07T19:30:00+08:00'`，其日期必须与 `--date` 一致。不传 `--date` 时，优先采用显式训练时刻的日期，否则采用本机今天；Agent 应根据用户时区显式传实际日期。
+
+`--weight-basis` / `-WeightBasis` 接受 `per_implement`（单只）、`per_side`（每侧）、`total`（合计）、`machine_display`（器械标示）和默认 `unknown`。例如用户明确说「双手各持 20kg 哑铃」时可传 `--sets '8x20' --weight-basis per_implement --laterality bilateral`；数值保持原报的 20，不自动翻倍。重量口径有歧义时仍须按原规则询问。
+
+`--resolve-as` 只确定基本动作身份，角度、姿势、单双侧和握法均从 `--exercise` 原话提取，显式变体参数优先覆盖。热身与工作组分别计算同侧轮次。
+
+`tests/test_ledger.py` 在临时目录验证拒绝写入不改文件、旧版兼容、日期/顺序、重量口径、默认来源、热身轮次、纠错和两端一致性。设置 `PWSH` 后两个原生运行时都会执行这些场景。

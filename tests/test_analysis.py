@@ -18,7 +18,7 @@ CATALOG = {'exercises': [{'id': 'press', 'primary_muscles': ['chest']},
 
 def record(date, reps=(10, 8), weight=40, **changes):
     r = dict(id=date, performed_at=date+'T23:00:00+08:00', exercise_id='press',
-             reported_name='press', sequence=1, day_type='standard', notes=None,
+             reported_name='press', sequence=1, day_type='standard', notes=None, weight_basis='total',
              variant=dict(angle='flat', posture='seated', laterality='bilateral', grip=None),
              equipment=dict(type='machine', name='A'),
              analysis_context=dict(session_template='push', execution_standard='full-v1',
@@ -135,7 +135,10 @@ class AnalysisTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 old = json.loads(result.stdout)
                 self.assertNotIn('analysis_context', old)
-                result = invoke(common+['--session-template', '肩日', '--execution-standard', '座椅4-全幅-v2', '--quality-change', 'improved_with_load_reduction', '--rest-sec', '180', '--notes', '用户报告质量显著改善而降重'])
+                # Use a separate training date; duplicate slots are now rejected before write.
+                updated = list(common)
+                updated[updated.index('--date') + 1] = '2026-09-06'
+                result = invoke(updated+['--session-template', '肩日', '--execution-standard', '座椅4-全幅-v2', '--quality-change', 'improved_with_load_reduction', '--rest-sec', '180', '--notes', '用户报告质量显著改善而降重'])
                 self.assertEqual(result.returncode, 0, result.stderr)
                 new = json.loads(result.stdout)
                 self.assertEqual(new['sets'], old['sets'])

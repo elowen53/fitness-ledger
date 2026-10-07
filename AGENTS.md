@@ -44,7 +44,7 @@
 - 名称不同但疑似同一动作时，先向用户展示拟对齐的规范动作，以及变体、器械或动作轨迹上的关键差异，并询问是否对齐。用户确认后复用已有 ID；若该叫法语义稳定，再加入 `aliases`，否则只保留为历史 `reported_name`。
 - 只有查过词典和历史记录、排除已有动作，并获得用户对动作含义的确认后，才能创建新 `exercise_id`。`unknown` 不代表可以无确认自动新增；`ambiguous` 必须先消歧。
 - 品牌、机型、角度、姿势、握法和单双侧通常不是新动作身份，而是 `equipment` 或 `variant`。若这些差异改变长期可比性，仍复用基本动作 ID，但分开建立趋势。
-- 长期进步比较的默认可比键为 `exercise_id + variant + equipment + sequence role`。只有可比键一致时，才直接比较重量、次数、组数、RIR 或 `volume_load`；跨键数据只能作为不同上下文，不能合并判定 PR 或退步。
+- 长期进步比较的默认可比键为 `exercise_id + variant + equipment + sequence role + weight_basis`。只有可比键一致时，才直接比较重量、次数、组数、RIR 或 `volume_load`；跨键数据只能作为不同上下文，不能合并判定 PR 或退步。
 - 若发现历史记录把同一动作拆成了不同 ID，或把不同动作错误合并到同一 ID，先定位具体记录并向用户说明，再做最小纠正；不要为了让趋势好看而静默改写历史。
 
 ## 非传统或用户自定义动作
@@ -70,10 +70,11 @@
 - 用户明确写出左手、右手、左腿或右腿时，记录 `laterality=unilateral`，每侧分别落组，不合并或取平均。CLI 使用 `R:8x20`、`L:8x20` 表示右侧/左侧；同侧出现的先后次序自动保存为 `round`。
 - 窄距、宽距、对握等会影响可比性的握法写入 `variant.grip`，不要只留在自由文本中。
 - 未说明单位的配重默认 kg，但在回报中明确这一假设。
+- 已确认的重量口径使用 `weight_basis`（单只、每侧、合计或器械标示）保存；不同口径分开统计，未知口径不猜测。
 - 单侧器械若用户只报一个数字，不猜测这是“每侧”还是“总重”；需要确认，或把解释写进 `notes`。
 - 热身组通过 `-WarmupCount` 标记，不计入默认训练量统计。
 - 失败组可记录实际完成次数；额外语义写入 `notes`，不捏造 RIR。
-- 用户已确认所有工作组均练至力竭：未报告 RIR 时默认记录 `rir=0`，不再询问或留空（2026-08-18 确认，见 `profile/training-preferences.json` 的 `recording_preferences.rir_default`）。
+- 用户已确认所有工作组均练至力竭：未报告 RIR 时由脚本按 profile 默认记录 `rir=0` 并保留 `rir_source=profile_default`，不再询问或留空（2026-08-18 确认，见 `profile/training-preferences.json` 的 `recording_preferences.rir_default`）。
 
 ## 动作身份与变体
 
@@ -106,6 +107,7 @@
 ## 动作顺序与优先级
 
 - `sequence` 是一次训练内从 1 开始的动作序号，是训练事实的一部分。
+- 新记录使用版本 2，实际日期保存为 `training_date`，录入时刻保存为 `recorded_at`；只有用户提供真实时刻才填 `performed_at`。旧版本继续读取，不自动迁移。
 - 展示训练日、复盘表现和寻找可比历史时，按 `sequence` 排序；`performed_at` 只表示记录中的时间戳，不能替代训练顺序。
 - 同一天的 `sequence` 不得重复。用户未提供顺序时才询问，不按动作类别自行重排。
 - 设计顺序前读取 `knowledge/exercise-order.md`。当前结论是：先做动作通常有利于该动作的力量发展，但没有可靠证据显示顺序会显著改变肌肉肥大。

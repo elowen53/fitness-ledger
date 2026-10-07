@@ -1,12 +1,15 @@
 # 数据模型
 
-每条 JSONL 记录代表一次训练中的一个动作，包含若干组。`schema_version` 用于将来迁移。
+每条 JSONL 记录代表一次训练中的一个动作，包含若干组。新记录使用 `schema_version: 2`；读取和校验继续支持版本 1，不自动迁移或补写历史。
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "20260805-193012-a1b2c3",
-  "performed_at": "2026-08-05T19:30:12.0000000+08:00",
+  "training_date": "2026-08-05",
+  "recorded_at": "2026-10-07T19:30:12.0000000+08:00",
+  "performed_at": null,
+  "weight_basis": "machine_display",
   "day_type": "standard",
   "day_type_basis": "default",
   "sequence": 1,
@@ -15,7 +18,7 @@
   "variant": {
     "angle": "incline",
     "posture": null,
-    "laterality": null,
+    "laterality": "bilateral",
     "grip": null
   },
   "equipment": {
@@ -23,7 +26,7 @@
     "name": "Life Fitness Insignia"
   },
   "sets": [
-    {"reps": 12, "weight_kg": 40, "rir": 2, "duration_sec": null, "bodyweight": false, "warmup": false, "side": null, "round": null}
+    {"reps": 12, "weight_kg": 40, "rir": 2, "rir_source": "reported", "duration_sec": null, "bodyweight": false, "warmup": false, "side": null, "round": null}
   ],
   "notes": "座椅 4 档",
   "tags": ["push"]
@@ -34,20 +37,40 @@
 
 - `reported_name` 永远保留原始叫法，便于发现误归一化。
 - `sequence` 是用户实际训练顺序，从 1 开始；分析和展示训练日时优先按它排序，不能用落盘时间代替。
-- 未知值用 `null`，不使用空字符串或臆测值。
+- 未知数值/时间用 `null`，不使用空字符串或臆测值；重量口径与 RIR 来源用显式的 `unknown` 枚举。
 - kg 是唯一外部负重单位；自重动作使用 `bodyweight=true`，不把体重伪装成外部负重。
 - 外部负重总量只计算非热身且同时有 `reps`、`weight_kg` 的组。工作组条数另行计算，包含自重与计时工作组；不以缺少外部负重排除肌群训练组数。
-- 单侧动作的 `side` 使用 `left | right`，`round` 表示该侧的第几轮。双侧动作两者均为 `null`。
+- 单侧动作的 `side` 使用 `left | right`，`round` 表示该侧、该阶段的第几轮；新记录中热身组与工作组分别从 1 编号，不相互挤占。旧记录不自动重编号。双侧动作两者均为 `null`。
 - 会影响动作可比性的握法保存在 `variant.grip`。例如窄距对握为 `narrow_neutral`，宽距为 `wide`。
 - `equipment.type` 保存 `machine / cable / barbell / dumbbell / bodyweight` 等可比较的器械大类。
 - `equipment.name` 不做全局枚举，因为同一器械在不同健身房可能有不同标识。
+
+## 日期、重量口径与来源（版本 2）
+
+- `training_date`：实际训练日期，`YYYY-MM-DD`，决定文件路径、日类型一致性、顺序唯一性、报告窗口和最近记录排序。
+- `recorded_at`：脚本实际录入时刻，带时区；补录历史训练时仍是当前录入时间。
+- `performed_at`：用户明确提供的实际训练时刻，带时区且本地日期必须与 `training_date` 相同；未提供则为 `null`。不再以录入时刻拼造训练时间。
+- 版本 1 的日期仍取旧 `performed_at` 的原始日期部分，不按当前主机时区转换。旧时间不升级为已确认的实际训练时刻。
+- `recent` 按训练日期倒序、同日 `sequence` 正序排列，最后才应用条数限制。旧记录缺少顺序时排在当日已知顺序之后；不猜测顺序。
+- `weight_basis` 为整条动作记录中 `weight_kg` 的统一口径：`per_implement`（单只器械）、`per_side`（每侧）、`total`（合计外部重量）、`machine_display`（器械标示配重）、`unknown`（未确认）。只有用户已明确说明时才填写具体口径；同一记录不混用口径。不能仅凭器械名称猜测。
+- `volume_kg` / `external_volume_kg` 保持原有的「记录重量 × 次数」算式，遵循本条记录的 `weight_basis`，不自动乘二，不宣称是全身承受的总重量。统计与趋势按口径分组；未知口径不能支持完全可比的负重表现结论。旧记录缺项按 `unknown` 读取，不从备注自动补写。
+- 每组 `rir_source` 为 `reported`（组格式明确包含 `@RIR`）、`profile_default`（脚本应用已确认偏好）、`unknown`（无值）。默认只作用于没有显式 RIR 的工作组，热身组不补默认值。
+- 应用默认 RIR 时，记录级 `rir_default` 保存所用 profile 偏好的快照，含数值、确认状态及原有确认日期/解释，保证以后偏好改变仍能追溯。原始历史没有来源字段时不反推来源。
+
+## 写入与校验边界
+
+- `add` 必须显式指定正整数顺序并保留非空原话。写入前使用与 `validate` 相同的记录校验，检查候选记录与完整现有账本；重复 ID、同日顺序冲突、日类型冲突、非法组数值、侧别冲突等错误均不落盘。
+- 所有版本的已提供数值必须满足类型和范围约束；次数是非负整数（允许失败组 0 次），重量和 RIR 是非负有限数，计时必须大于零。版本 1 可保留缺少的顺序、日类型、单侧轮次和新增字段；版本 2 不允许以缺字段绕过新约束。
+- 新单侧记录必须逐组标记左/右；带左右组但未指定单双侧时由侧别确定为单侧，没有单双侧或侧别信息时沿用双侧约定。
+- Python 和 PowerShell 的 `add` / `resequence` 共用排他锁 `.fitness-write.lock`，避免同时检查并写入相同顺序。程序异常终止遗留的锁不自动删除；先确认没有写入进程再处理。
+- `resequence` 先定位唯一 ID、校验修改后的完整账本，再以同目录临时文件原子替换目标文件。冲突或重复 ID 时不修改任何记录；该命令仍只用于用户明确授权的纠错。
 
 ## 动作身份与长期对齐
 
 - `exercise_id` 是同一基本动作跨日期、跨叫法保持不变的唯一身份；`reported_name` 是用户当次原话，不承担唯一性。
 - 新记录写入前，解析器同时匹配词典规范名/别名和历史 `reported_name`。命中历史叫法时仍返回原 `exercise_id`，但不会因此自动污染全局别名。
 - 名称不同但存在合理的同动作候选时，需要用户确认对齐；确认无法归入已有动作后才创建新 ID。
-- 默认趋势键为 `exercise_id + variant.angle + variant.posture + variant.laterality + variant.grip + equipment.type + equipment.name + sequence`。其中 `sequence` 表示本次训练内的顺序角色；不同趋势键不直接比较重量或 PR。
+- 默认趋势键为 `exercise_id + variant.angle + variant.posture + variant.laterality + variant.grip + equipment.type + equipment.name + sequence + weight_basis`。其中 `sequence` 表示本次训练内的顺序角色；不同趋势键不直接比较重量或 PR。
 - `resolve` 返回的候选包含 `matched_source`：`catalog` 表示命中词典，`history` 表示命中过往日志中的原始叫法。
 
 ## 用户自定义动作
@@ -74,7 +97,7 @@
 
 ## 可选分析上下文（向后兼容）
 
-`schema_version` 仍为 1。旧日志及未提供上下文的 `add` 不新增字段，不做迁移。仅在用户明确报告或确认后，可随新记录保存：
+分析上下文同时支持版本 1 和 2。旧日志不做迁移；未提供上下文的 `add` 不新增 `analysis_context`。仅在用户明确报告或确认后，可随新记录保存：
 
 ```json
 "analysis_context": {

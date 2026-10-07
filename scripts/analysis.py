@@ -25,13 +25,22 @@ def context_errors(context):
     return errors
 
 
+def record_date(record):
+    # Version 1 timestamps are retained only as a legacy date source.
+    return record.get('training_date') or (record.get('performed_at') or '')[:10]
+
+
+def weight_basis(record):
+    return record.get('weight_basis') or 'unknown'
+
+
 def work_sets(record):
     return [s for s in record.get('sets', []) if not s.get('warmup')]
 
 
 def base_key(record):
     v, e = record.get('variant') or {}, record.get('equipment') or {}
-    return [record.get('exercise_id')] + [v.get(k) for k in ('angle', 'posture', 'laterality', 'grip')] + [e.get('type'), e.get('name'), record.get('sequence')]
+    return [record.get('exercise_id')] + [v.get(k) for k in ('angle', 'posture', 'laterality', 'grip')] + [e.get('type'), e.get('name'), record.get('sequence'), weight_basis(record)]
 
 
 def set_metrics(record):
@@ -50,15 +59,15 @@ def set_metrics(record):
 
 
 def snapshot(record):
-    return dict(id=record.get('id'), date=record['performed_at'][:10],
-                sequence=record.get('sequence'), reported_name=record.get('reported_name'),
+    return dict(id=record.get('id'), date=record_date(record),
+                sequence=record.get('sequence'), weight_basis=weight_basis(record), reported_name=record.get('reported_name'),
                 notes=record.get('notes'), analysis_context=record.get('analysis_context'),
                 sets=work_sets(record), **set_metrics(record))
 
 
 def preceding(record, records):
     seq = record.get('sequence')
-    same_day = [r for r in records if r['performed_at'][:10] == record['performed_at'][:10]]
+    same_day = [r for r in records if record_date(r) == record_date(record)]
     if seq is None or any(r.get('sequence') is None for r in same_day):
         return None
     earlier = sorted([r for r in same_day if r['sequence'] < seq], key=lambda r: r['sequence'])
@@ -108,6 +117,8 @@ def compare(latest, previous, records):
             reasons.append('rep_measurement_unavailable')
         if any(s.get('weight_kg') is None and not s.get('bodyweight') for s in a+b):
             reasons.append('load_unknown')
+        if any(s.get('weight_kg') is not None for s in a+b) and (weight_basis(latest) == 'unknown' or weight_basis(previous) == 'unknown'):
+            reasons.append('weight_basis_unknown')
         if any(s.get('bodyweight') for s in a+b):
             reasons.append('bodyweight_load_untracked')
         if [[s.get(k) for k in SET_FIELDS] for s in a] != [[s.get(k) for k in SET_FIELDS] for s in b]:
@@ -138,14 +149,14 @@ def build_report(records, catalog, date):
         errors = context_errors(r.get('analysis_context'))
         if errors:
             raise ValueError('%s: %s' % (r.get('id'), '; '.join(errors)))
-    eligible = [r for r in records if r['performed_at'][:10] <= date]
-    eligible.sort(key=lambda r: (r['performed_at'][:10], r.get('sequence') or 0, r.get('id') or ''))
+    eligible = [r for r in records if record_date(r) <= date]
+    eligible.sort(key=lambda r: (record_date(r), r.get('sequence') or 0, r.get('id') or ''))
     catalog_map = {i['id']: i for i in catalog['exercises']}
     windows = []
     for days in (7, 14):
         start = (end-timedelta(days=days-1)).isoformat()
-        selected = [r for r in eligible if r['performed_at'][:10] >= start]
-        dates = sorted({r['performed_at'][:10] for r in selected})
+        selected = [r for r in eligible if record_date(r) >= start]
+        dates = sorted({record_date(r) for r in selected})
         muscles = {}
         for r in selected:
             metrics = set_metrics(r)
@@ -155,7 +166,7 @@ def build_report(records, catalog, date):
                 if muscle not in muscles:
                     muscles[muscle] = dict(muscle=muscle, dates=set(), **{k: 0 for k in metrics if k not in ('reps', 'external_volume_kg')})
                 m = muscles[muscle]
-                m['dates'].add(r['performed_at'][:10])
+                m['dates'].add(record_date(r))
                 for k in metrics:
                     if k in m:
                         m[k] += metrics[k]
@@ -176,14 +187,14 @@ def build_report(records, catalog, date):
     trends = []
     for rs in groups.values():
         latest = rs[-1]
-        if latest['performed_at'][:10] < windows[1]['start']:
+        if record_date(latest) < windows[1]['start']:
             continue
         previous = rs[-2] if len(rs) > 1 else None
         trends.append(dict(exercise_id=latest['exercise_id'], base_key=base_key(latest),
                            history=[snapshot(r) for r in rs[-3:][::-1]],
                            **compare(latest, previous, eligible)))
     trends.sort(key=lambda t: (t['exercise_id'], str(t['history'][0]['id'])))
-    last_date = eligible[-1]['performed_at'][:10] if eligible else None
+    last_date = record_date(eligible[-1]) if eligible else None
     return dict(as_of=date, last_workout_date=last_date,
                 days_since_last_workout=(end-datetime.strptime(last_date, '%Y-%m-%d').date()).days if last_date else None,
                 windows=windows, trends=trends,
