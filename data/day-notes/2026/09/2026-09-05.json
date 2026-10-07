@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-05",
+  "day_status": "rest_day",
+  "applies_through": "2026-10-07",
+  "training_status": "paused",
+  "status_basis": "user_reported",
+  "reason": "恢复期持续",
+  "reported_on": "2026-10-07",
+  "reported_text": "9月5日之后到10月7日一直在恢复期，请你记录",
+  "notes": "用户确认此前恢复期持续至 2026-10-07；本条承接已有 2026-08-25 至 2026-09-04 的恢复期备注，覆盖 2026-09-05 至 2026-10-07（含首尾）。按既有无训练记录即休息日的约定处理，不创建空训练日志；未报告具体恢复状况或复训日期。"
+}
