@@ -93,6 +93,21 @@
       }
     },
     {
+      "id": "machine_row",
+      "canonical_name": "器械划船",
+      "definition": "坐姿、屈肘把把手向躯干拉回的器械水平划船；用户于2026-10-09确认豪斯特器械划船符合此定义。品牌保存于equipment，不作为动作别名。",
+      "movement_pattern": "horizontal_pull",
+      "primary_muscles": ["back"],
+      "equipment_type": "machine",
+      "aliases": ["坐姿器械水平划船"],
+      "supported_variants": {
+        "angle": ["flat"],
+        "posture": ["seated"],
+        "laterality": ["bilateral", "unilateral"],
+        "grip": ["narrow", "wide", "neutral", "narrow_neutral"]
+      }
+    },
+    {
       "id": "barbell_back_squat",
       "canonical_name": "杠铃后蹲",
       "movement_pattern": "squat",
@@ -288,6 +303,23 @@
         "angle": [],
         "posture": ["standing", "seated"],
         "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
+      "id": "kelso_shrug",
+      "canonical_name": "Kelso耸肩",
+      "naming_status": "user_defined",
+      "definition": "用户于2026-10-09确认：胸部靠在胸托上，手臂基本伸直，主要让肩胛骨前伸后缩；按用户定义，主要训练中下斜方肌，区别于屈肘划船及向上耸肩。",
+      "target_basis": "user_confirmed",
+      "movement_pattern": "scapular_retraction",
+      "primary_muscles": ["back"],
+      "equipment_type": "machine",
+      "aliases": [],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing", "seated", "lying"],
+        "laterality": ["bilateral", "unilateral"],
+        "grip": []
       }
     },
     {
