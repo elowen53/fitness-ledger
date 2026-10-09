@@ -18,7 +18,7 @@
 ## 实现步骤
 
 1. 增加 tests/test_analysis.py：临时账本覆盖单侧轮次、自重/热身、日期窗口、旧日志兼容、跨器械/顺序隔离、质量改善降重、前序工作量变化、未知信息不判 PR。
-2. 修改 scripts/fitness.py；增加 analysis.py 分析模块。增加可选执行标准、模板、明确质量变化、休息秒数；旧 add 输出保持不变。validate 检查新增元数据。
+2. 修改 scripts/train_logbook.py；增加 analysis.py 分析模块。增加可选执行标准、模板、明确质量变化、休息秒数；旧 add 输出保持不变。validate 检查新增元数据。
 3. report 输出滚动 7/14 天直接组数、每侧数据、频率、休息日期和最近三次候选历史；已知不一致建立新基线，缺失上下文仅提供有限比较；负重吨位只描述外部负荷。
 4. 更新 docs/data-model.md、docs/agent-cli.md、README.md 与带来源的 knowledge/training-analysis.md；区分教练经验、科学原则与用户事实。将旧计划保留为历史，当前流程指向最新偏好。
 5. 运行冒烟测试与分析回归；真实账本只读 validate/report；用同步后的 Git 基线验证数据、词典、偏好及记录合同未变。

@@ -1,6 +1,6 @@
-# Fitness Ledger Agent Contract
+# train-logbook Agent 约定
 
-本仓库是用户的训练事实账本。Agent 的任务是把自然语言训练描述安全地转为结构化记录，并维护可审计的动作词典。
+本项目名为「train-logbook」，是用户的训练事实账本。Agent 的任务是把自然语言训练描述安全地转为结构化记录，并维护可审计的动作词典。
 
 ## 知识库使用
 
@@ -13,15 +13,15 @@
 
 ## 每次记录必须遵循的流程
 
-1. 读取 `catalog/exercises.json`，或调用 `scripts/fitness.sh resolve --exercise <原始叫法> --json`。
+1. 读取 `catalog/exercises.json`，或调用 `scripts/train-logbook.sh resolve --exercise <原始叫法> --json`。
 2. 将动作拆成：规范动作 `exercise_id`、变体、具体器械。不要为每个品牌或角度创建新的规范动作。
 3. 只有在结果唯一且语义合理时才写入。脚本返回 `ambiguous` 或 `unknown` 时，先向用户确认。
-4. 使用脚本写入，不要手工拼 JSONL。macOS 使用 `scripts/fitness.sh add`（调用 `scripts/fitness.py add`）。始终保留用户原话到 `reported_name`。
+4. 使用脚本写入，不要手工拼 JSONL。macOS 使用 `scripts/train-logbook.sh add`（调用 `scripts/train_logbook.py add`）。始终保留用户原话到 `reported_name`。
 5. 严格按用户报告的先后顺序写入 `sequence`。即使某动作因等待确认而稍后补写，也必须保留它在原训练中的位置，不能使用落盘时间代替动作顺序。
-6. 写入后运行 `validate`（`scripts/fitness.sh validate`）。若本轮包含多条动作，全部完成后再运行一次即可。
+6. 写入后运行 `validate`（`scripts/train-logbook.sh validate`）。若本轮包含多条动作，全部完成后再运行一次即可。
 7. 简短回报日期、规范动作、变体、器械、顺序和组数；指出任何采用的假设。不要自动提交 Git，除非用户明确要求。
 
-> 平台说明：本仓库仅维护 macOS 环境，以 `scripts/fitness.sh` 为入口，使用 Python 3 标准库实现。新功能或规则变更必须通过 `bash tests/smoke.sh` 和 `python3 -m unittest discover -s tests -p 'test_*.py'` 验证。
+> 平台说明：本仓库仅维护 macOS 环境，以 `scripts/train-logbook.sh` 为入口，使用 Python 3 标准库实现。新功能或规则变更必须通过 `bash tests/smoke.sh` 和 `python3 -m unittest discover -s tests -p 'test_*.py'` 验证。
 
 脚本命令、参数、组格式和常用调用示例集中记录在 `docs/agent-cli.md`。需要查询 CLI 用法时读取该文档，不要依赖面向用户的 `README.md`。
 

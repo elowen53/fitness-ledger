@@ -83,7 +83,7 @@ ACSM 2026 强调持续执行、个体化和足够的周训练量，并没有要�
 CLI 示例：
 
 ```bash
-./scripts/fitness.sh add \
+./scripts/train-logbook.sh add \
   --date 2026-08-08 --exercise "FORWARD推胸" --resolve-as "器械推胸" \
   --sets "10x110" "9x110" "8x110" --sequence 1 \
   --day-type overload --day-type-basis planned \

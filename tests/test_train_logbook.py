@@ -11,13 +11,13 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from analysis import set_metrics
-from fitness import iso7
+from train_logbook import iso7
 from datetime import datetime, timezone, timedelta
 
 
-class LedgerTests(unittest.TestCase):
+class TrainLogbookTests(unittest.TestCase):
     def fixture(self, directory, runtime=None):
-        runtime = runtime or [sys.executable, str(ROOT/'scripts/fitness.py')]
+        runtime = runtime or [sys.executable, str(ROOT/'scripts/train_logbook.py')]
         root = Path(directory)
         (root/'catalog').mkdir()
         (root/'profile').mkdir()
@@ -156,7 +156,7 @@ class LedgerTests(unittest.TestCase):
     def test_shared_lock_does_not_get_stolen(self):
         with tempfile.TemporaryDirectory() as d:
             root,run=self.fixture(d)
-            (root/'.fitness-write.lock').write_text('held')
+            (root/'.train-logbook-write.lock').write_text('held')
             before=self.files(root)
             run('add','--exercise','器械推胸','--sets','10x40','--sequence','1',ok=False)
             self.assertEqual(before,self.files(root))
@@ -167,7 +167,7 @@ class LedgerTests(unittest.TestCase):
 
     def test_shell_entry_point_matches_python_outputs(self):
         results=[]
-        for runtime in ([sys.executable, str(ROOT/'scripts/fitness.py')], [str(ROOT/'scripts/fitness.sh')]):
+        for runtime in ([sys.executable, str(ROOT/'scripts/train_logbook.py')], [shutil.which('bash') or 'bash', (ROOT/'scripts/train-logbook.sh').as_posix()]):
             with tempfile.TemporaryDirectory() as d:
                 root,run=self.fixture(d,runtime)
                 r=self.add(run,exercise='坐姿上斜器械推胸',resolve_as='器械推胸',weight_basis='machine_display')

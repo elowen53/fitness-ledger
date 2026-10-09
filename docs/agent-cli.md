@@ -1,10 +1,10 @@
-# Fitness Ledger Agent CLI Reference
+# train-logbook Agent CLI 参考
 
 本文档供 Agent 执行仓库任务时使用，不是面向最终用户的操作指南。行为约束以根目录 `AGENTS.md` 为准；本文只集中保存脚本接口和调用示例。
 
 ## macOS 入口
 
-使用 `./scripts/fitness.sh <command> ...`，由它调用 `scripts/fitness.py`。运行环境为 macOS、Bash 和 Python 3 标准库；可用 `PYTHON_BIN` 指定 Python 3 可执行文件。
+使用 `./scripts/train-logbook.sh <command> ...`，由它调用 `scripts/train_logbook.py`。运行环境为 macOS、Bash 和 Python 3 标准库；可用 `PYTHON_BIN` 指定 Python 3 可执行文件。
 
 命令：
 
@@ -22,9 +22,9 @@
 ## 调用示例
 
 ```bash
-./scripts/fitness.sh resolve --exercise "力健上斜推胸机" --json
+./scripts/train-logbook.sh resolve --exercise "力健上斜推胸机" --json
 
-./scripts/fitness.sh add \
+./scripts/train-logbook.sh add \
   --date "2026-08-27" \
   --sequence 1 \
   --exercise "力健上斜推胸机" \
@@ -36,12 +36,12 @@
   --laterality bilateral \
   --day-type standard
 
-./scripts/fitness.sh recent --limit 10 --json
-./scripts/fitness.sh stats --exercise "器械推胸" --json
-./scripts/fitness.sh list --json
-./scripts/fitness.sh validate --json
+./scripts/train-logbook.sh recent --limit 10 --json
+./scripts/train-logbook.sh stats --exercise "器械推胸" --json
+./scripts/train-logbook.sh list --json
+./scripts/train-logbook.sh validate --json
 
-./scripts/fitness.sh resequence \
+./scripts/train-logbook.sh resequence \
   --id "20260827-120000-abcdef" \
   --sequence 2
 ```
@@ -97,9 +97,9 @@
 ## 训练分析
 
 ```bash
-./scripts/fitness.sh report --date 2026-09-05 --json
+./scripts/train-logbook.sh report --date 2026-09-05 --json
 # 默认以今天为截止日，完整账本只读分析
-./scripts/fitness.sh report --json
+./scripts/train-logbook.sh report --json
 ```
 
 `report` 支持截止日期、项目根目录和 JSON 输出，分析所有肌群。它不使用 `--exercise` 筛选，避免误把单动作组数当成整个肌群周剂量。默认两个窗口均包含截止日；候选趋势详见 `docs/data-model.md`。非 JSON 模式也输出缩进 JSON，供 Agent 读取后向用户用自然语言总结。
@@ -125,4 +125,4 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 `--resolve-as` 只确定基本动作身份，角度、姿势、单双侧和握法均从 `--exercise` 原话提取，显式变体参数优先覆盖。热身与工作组分别计算同侧轮次。
 
-`tests/test_ledger.py` 在临时目录验证拒绝写入不改文件、旧版兼容、日期/顺序、重量口径、默认来源、热身轮次、纠错和 shell/Python 入口一致性。
+`tests/test_train_logbook.py` 在临时目录验证拒绝写入不改文件、旧版兼容、日期/顺序、重量口径、默认来源、热身轮次、纠错和 shell/Python 入口一致性。

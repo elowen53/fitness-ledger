@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fitness.py - macOS CLI for the fitness ledger, using Python 3.
+train_logbook.py - train-logbook 的 macOS CLI，使用 Python 3。
 
 Commands: resolve, add, resequence, recent, stats, report, list, validate
 
 Example (macOS):
-    ./scripts/fitness.sh add --exercise "上斜器械推胸" \
+    ./scripts/train-logbook.sh add --exercise "上斜器械推胸" \
         --sets "12x40@2","10x45@1" --equipment "Life Fitness Insignia" \
         --notes "座椅 4 档" --sequence 1
 
@@ -686,8 +686,8 @@ def command_validate(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="fitness",
-        description="fitness-ledger macOS CLI（Python 3）。",
+        prog="train-logbook",
+        description="train-logbook macOS CLI（Python 3）。",
     )
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
@@ -721,7 +721,7 @@ def build_parser():
                        help="仓库根目录(默认脚本上级目录)")
 
     for name in ("resolve", "add", "resequence", "recent", "stats", "report", "validate", "list"):
-        p = sub.add_parser(name, help="fitness %s" % name)
+        p = sub.add_parser(name, help="train-logbook %s" % name)
         add_common(p)
     return parser
 
@@ -729,11 +729,11 @@ def build_parser():
 @contextmanager
 def write_lock(root):
     """Serialize ledger writes with an exclusive file; never steal a stale lock."""
-    path = os.path.join(root, '.fitness-write.lock')
+    path = os.path.join(root, '.train-logbook-write.lock')
     try:
         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError:
-        raise SystemExit('账本正在写入，或存在遗留 .fitness-write.lock；确认没有写入进程后重试。')
+        raise SystemExit('账本正在写入，或存在遗留 .train-logbook-write.lock；确认没有写入进程后重试。')
     try:
         os.close(fd)
         yield

@@ -121,7 +121,7 @@ class AnalysisTests(unittest.TestCase):
             (Path(d)/'catalog').mkdir()
             shutil.copyfile(ROOT/'catalog/exercises.json', Path(d)/'catalog/exercises.json')
             def invoke(options):
-                return subprocess.run([sys.executable, str(ROOT/'scripts/fitness.py')]+options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                return subprocess.run([sys.executable, str(ROOT/'scripts/train_logbook.py')]+options, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             common = ['add', '--exercise', 'Y举', '--sets', 'R:8x20@0,L:7x20@1', '--laterality', 'unilateral', '--sequence', '3', '--date', '2026-09-05', '--project-root', d, '--json']
             result = invoke(common)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -171,7 +171,7 @@ class AnalysisTests(unittest.TestCase):
             f.write_text('\n'.join(json.dumps(r) for r in rows))
             before = f.read_bytes()
             for day in ['2026-09-05', '2026-08-01', '2026-10-01']:
-                py = subprocess.check_output([sys.executable, str(ROOT/'scripts/fitness.py'), 'report', '--date', day, '--project-root', d, '--json'])
+                py = subprocess.check_output([sys.executable, str(ROOT/'scripts/train_logbook.py'), 'report', '--date', day, '--project-root', d, '--json'])
                 self.assertEqual(json.loads(py), build_report(rows, CATALOG, day))
             self.assertEqual(before, f.read_bytes())
 

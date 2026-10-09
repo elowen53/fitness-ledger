@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Smoke tests for the macOS CLI (scripts/fitness.py). Run from anywhere:
+# Smoke tests for the macOS CLI (scripts/train_logbook.py). Run from anywhere:
 #   bash tests/smoke.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-FITNESS="$SCRIPT_DIR/../scripts/fitness.py"
+TRAIN_LOGBOOK="$SCRIPT_DIR/../scripts/train_logbook.py"
 
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -13,7 +13,7 @@ mkdir -p "$TMP_ROOT/catalog" "$TMP_ROOT/data/workouts"
 cp "$PROJECT_ROOT/catalog/exercises.json" "$TMP_ROOT/catalog/exercises.json"
 
 run() {
-    python3 "$FITNESS" "$@" --project-root "$TMP_ROOT"
+    python3 "$TRAIN_LOGBOOK" "$@" --project-root "$TMP_ROOT"
 }
 
 json_get() {
