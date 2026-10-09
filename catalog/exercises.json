@@ -69,10 +69,11 @@
     {
       "id": "lat_pulldown",
       "canonical_name": "高位下拉",
+      "definition": "用户于2026-10-09确认：“窄距钢线下拉”“窄距钢线对握下拉”“窄距对握钢线下拉”完全是同一个窄距对握钢线下拉动作，握法为narrow_neutral；继续复用高位下拉的基本动作身份，不另建exercise_id。",
       "movement_pattern": "vertical_pull",
       "primary_muscles": ["lats"],
       "equipment_type": "cable_or_machine",
-      "aliases": ["高位下拉", "下拉", "拉力器下拉", "lat pulldown", "pulldown"],
+      "aliases": ["高位下拉", "下拉", "拉力器下拉", "lat pulldown", "pulldown", "窄距对握钢线下拉", "窄距钢线下拉", "窄距钢线对握下拉"],
       "supported_variants": {
         "angle": ["vertical"],
         "posture": ["seated", "kneeling"],
