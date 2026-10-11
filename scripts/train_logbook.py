@@ -424,8 +424,8 @@ def command_add(args):
         "recorded_at": iso7(now),
         "performed_at": args.performed_at,
         "weight_basis": args.weight_basis or "unknown",
-        "day_type": args.day_type,
-        "day_type_basis": args.day_type_basis,
+        "day_type": None,
+        "day_type_basis": None,
         "sequence": args.sequence if args.sequence and args.sequence > 0 else None,
         "exercise_id": resolution["exercise"]["id"],
         "reported_name": args.exercise,
@@ -445,6 +445,23 @@ def command_add(args):
     }
 
     history = read_workout_records(args.workout_root)
+    same_day = sorted({r.get('day_type') for r in history if record_date(r) == training_date and r.get('day_type')})
+    if args.focus:
+        if not args.overload_lever:
+            raise SystemExit('--focus 需要 --overload-lever（load/reps/sets/density）。')
+        if args.day_type not in (None, 'overload'):
+            raise SystemExit('重点推进动作所在训练日必须是 overload。')
+        record['progression_target'] = {'lever': args.overload_lever, 'target': args.target or None, 'basis': 'user_reported'}
+        record['day_type'] = 'overload'
+        record['day_type_basis'] = args.day_type_basis or '用户报告本次重点推进：%s（%s）' % (args.exercise, args.overload_lever)
+    elif args.overload_lever or args.target:
+        raise SystemExit('--overload-lever / --target 只用于 --focus 重点推进动作。')
+    else:
+        # Unstated day type follows what is already recorded for the same day.
+        record['day_type'] = args.day_type or (same_day[0] if len(same_day) == 1 else 'standard')
+        record['day_type_basis'] = args.day_type_basis or (
+            '同日训练意图：渐进超负荷（见重点推进动作）' if record['day_type'] == 'overload' and not args.day_type
+            else 'default')
     if not args.no_infer:
         # User rule: unstated equipment/variant follows the user's own most frequent history.
         fills, ambiguous = infer(record, history)
@@ -480,7 +497,8 @@ def command_add(args):
             values[key.strip()] = value.strip()
         record['setup'] = {'values': values, 'source': 'reported', 'from_record': None}
     elif args.setup_same_as_last:
-        last = last_setup_record(read_workout_records(args.workout_root), record['exercise_id'], record['equipment'], training_date)
+        last = last_setup_record(read_workout_records(args.workout_root), record['exercise_id'], record['equipment'],
+                                 training_date, record['variant']['angle'])
         if last is None:
             raise SystemExit('没有同一动作和器械的已记录设置，无法沿用上次设置。')
         record['setup'] = {'values': last['setup']['values'], 'source': 'same_as_previous', 'from_record': last['id']}
@@ -509,9 +527,13 @@ def command_add(args):
             record["equipment"]["type"], record["equipment"]["name"] or ""))
 
 
-def last_setup_record(records, exercise_id, equipment, before_date=None):
-    """Most recent record of the same exercise and equipment that stored a setup."""
-    rows = [r for r in records if r.get('exercise_id') == exercise_id and r.get('equipment') == equipment
+def last_setup_record(records, exercise_id, equipment, before_date=None, angle=None):
+    """Most recent record of the same exercise, equipment and angle that stored a setup.
+
+    One brand name can cover several machines (HOIST flat vs incline press), so the angle separates them.
+    """
+    rows = [r for r in records if r.get('exercise_id') == exercise_id and same_equipment(r.get('equipment'), equipment)
+            and (r.get('variant') or {}).get('angle') == angle
             and (r.get('setup') or {}).get('values') and (before_date is None or record_date(r) <= before_date)]
     rows.sort(key=lambda r: (record_date(r), r.get('sequence') or 0, r.get('id') or ''))
     return rows[-1] if rows else None
@@ -607,11 +629,46 @@ def command_align(args):
     print('已写入 %d 条记录。' % applied if args.apply else '预览模式，未修改账本；确认后加 --apply。')
 
 
+def same_equipment(a, b):
+    """Same named equipment; a missing type on either side does not separate them."""
+    a, b = a or {}, b or {}
+    if a.get('name') != b.get('name'):
+        return False
+    return a.get('type') is None or b.get('type') is None or a.get('type') == b.get('type')
+
+
 # ---------------------------------------------------------------------------
 # Command: setup
 # ---------------------------------------------------------------------------
 
+def list_setups(records):
+    """Latest stored setup per exercise and machine/cable equipment, plus equipment never set up."""
+    rows = {}
+    for r in sorted(records, key=lambda r: (record_date(r), r.get('sequence') or 0)):
+        e = r.get('equipment') or {}
+        if e.get('type') not in ('machine', 'cable'):
+            continue
+        angle = (r.get('variant') or {}).get('angle')
+        key = (r.get('exercise_id'), e.get('name'), angle)
+        row = rows.setdefault(key, dict(exercise_id=key[0], equipment=e, angle=angle, status='none', setup=None,
+                                        record_id=None, date=None, last_used=None))
+        row['last_used'] = record_date(r)
+        if (r.get('setup') or {}).get('values'):
+            row.update(status='found', setup=r['setup']['values'], record_id=r['id'], date=record_date(r))
+    return sorted(rows.values(), key=lambda x: (x['exercise_id'], str(x['equipment'].get('name')), str(x['angle'])))
+
+
 def command_setup(args):
+    if not args.exercise:
+        rows = list_setups(read_workout_records(args.workout_root))
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False, separators=(",", ":")))
+        else:
+            for x in rows:
+                print("%s / %s%s：%s" % (x["exercise_id"], x["equipment"].get("name") or "-",
+                                       " / " + x["angle"] if x["angle"] else "",
+                                      "，".join("%s=%s" % kv for kv in x["setup"].items()) if x["setup"] else "未记录"))
+        return
     resolution = resolve_exercise(args.resolve_as or args.exercise, catalog_path=args.catalog_path,
                                   workout_root=args.workout_root)
     if resolution["status"] != "resolved":
@@ -619,7 +676,8 @@ def command_setup(args):
     catalog = read_catalog(args.catalog_path)
     item = next(i for i in catalog["exercises"] if i.get("id") == resolution["exercise"]["id"])
     equipment = {"type": get_equipment_type(args.exercise, item.get("equipment_type")), "name": args.equipment or None}
-    last = last_setup_record(read_workout_records(args.workout_root), item["id"], equipment)
+    angle = args.angle or get_variant(args.exercise)["angle"]
+    last = last_setup_record(read_workout_records(args.workout_root), item["id"], equipment, angle=angle)
     result = {"exercise_id": item["id"], "equipment": equipment,
               "status": "found" if last else "none",
               "setup": last["setup"]["values"] if last else None,
@@ -926,9 +984,13 @@ def build_parser():
         p.add_argument("--apply", dest="apply", action="store_true", help="align 实际写入（默认只预览）")
         p.add_argument("--skip-id", dest="skip_id", nargs="+", default=None, help="align 跳过的记录 ID")
         p.add_argument("--tags", dest="tags", nargs="+", default=None, help="标签")
-        p.add_argument("--day-type", dest="day_type", default="standard",
+        p.add_argument("--focus", dest="focus", action="store_true", help="用户指定的本次重点推进动作")
+        p.add_argument("--overload-lever", dest="overload_lever", choices=("load", "reps", "sets", "density"), default=None,
+                       help="重点推进的变量")
+        p.add_argument("--target", dest="target", default=None, help="用户说的本次目标原话（可选）")
+        p.add_argument("--day-type", dest="day_type", default=None,
                        choices=("standard", "overload", "deload"), help="standard/overload/deload")
-        p.add_argument("--day-type-basis", dest="day_type_basis", default="default", help="day_type 依据")
+        p.add_argument("--day-type-basis", dest="day_type_basis", default=None, help="day_type 依据")
         p.add_argument("--sequence", dest="sequence", type=int, default=0, help="训练内动作顺序(1 起)")
         p.add_argument("--warmup-count", dest="warmup_count", type=int, default=0, help="前 N 组为热身")
         p.add_argument("--limit", dest="limit", type=int, default=10, help="recent 条数")

@@ -11,6 +11,13 @@
       "status": "user_confirmed",
       "confirmed_on": "2026-09-05"
     },
+    "session_checks": {
+      "focus": "每次训练问一次本次重点推进的动作（1–2 个）及推进变量（次数/重量/组数/密度）；用户指定后该动作记为推进目标，当天为 overload；用户说没有则为 standard。",
+      "quality": "只询问重点动作的动作质量；没有重点动作时询问前 1–2 个动作。答案为提高/保持/下降之一即可，可跳过；未回答不视为保持。",
+      "setup": "器械和钢线动作的设置每台只记一次；之后每次训练用一句“今天器械设置都和上次一样吗”统一确认，有变化或首次使用的器械才询问具体设置，可跳过。",
+      "status": "user_confirmed",
+      "confirmed_on": "2026-10-11"
+    },
     "exercise_alignment": {
       "required_before_write": true,
       "match_sources": ["catalog", "workout_history"],

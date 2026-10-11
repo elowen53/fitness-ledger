@@ -7,6 +7,7 @@ from analysis import (context_errors, record_date, SET_TYPES, FAILURE_MODES, PAR
                       SETUP_SOURCES)
 
 WEIGHT_BASES = ('unknown', 'per_implement', 'per_side', 'total', 'machine_display')
+OVERLOAD_LEVERS = ('load', 'reps', 'sets', 'density')
 
 
 def number(value, minimum=0, integer=False):
@@ -90,6 +91,14 @@ def record_errors(records, catalog):
                 days[date] = day
         if version == 2 and (not isinstance(r.get('day_type_basis'), str) or not r['day_type_basis'].strip()):
             fail('day_type_basis must be nonempty text')
+        target = r.get('progression_target')
+        if target is not None:
+            if (not isinstance(target, dict) or target.get('lever') not in OVERLOAD_LEVERS
+                    or target.get('basis') not in ('user_reported', 'planned')
+                    or (target.get('target') is not None and (not isinstance(target['target'], str) or not target['target'].strip()))):
+                fail('invalid progression_target')
+            elif day != 'overload':
+                fail('progression_target requires day_type overload')
         if r.get('weight_basis') is not None and r['weight_basis'] not in WEIGHT_BASES:
             fail('invalid weight_basis')
         if version == 2 and r.get('weight_basis') is None:
@@ -190,6 +199,7 @@ def record_errors(records, catalog):
         if (source is None or source is r or record_date(source) > record_date(r)
                 or source.get('exercise_id') != r.get('exercise_id')
                 or source.get('equipment') != r.get('equipment')
+                or (source.get('variant') or {}).get('angle') != (r.get('variant') or {}).get('angle')
                 or (source.get('setup') or {}).get('values') != setup['values']):
             errors.append('%s: setup.from_record must be an earlier record of the same exercise and equipment with identical values' % rid)
     return errors

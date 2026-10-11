@@ -42,6 +42,7 @@
 ./scripts/train-logbook.sh stats --exercise "器械推胸" --json
 ./scripts/train-logbook.sh list --json
 ./scripts/train-logbook.sh setup --exercise "FORWARD推胸" --resolve-as "器械推胸" --equipment "FORWARD" --json
+./scripts/train-logbook.sh setup --json   # 所有器械/钢线动作（按动作+器械名+角度）的最近设置，未记录的 status=none
 ./scripts/train-logbook.sh validate --json
 
 ./scripts/train-logbook.sh resequence \
@@ -91,10 +92,11 @@
 | 用户报告的器械设置（可选） | `--setup 座椅=4 靠垫=2` |
 | 用户确认与上次设置相同（可选） | `--setup-same-as-last` |
 | 不按历史补全器械/变体 | `--no-infer` |
+| 本次重点推进动作 | `--focus --overload-lever reps --target "最重组多一次"` |
 | 重量口径（省略时按器械类型：器械/钢线/杠铃记总重，哑铃记单只） | `--weight-basis` |
 | JSON 输出 | `--json` |
 
-`--day-type` 允许 `standard`、`overload`、`deload`。训练日类型的判定规则与 `overload_lever` 记录方式见 `knowledge/training-day-types.md`。
+`--day-type` 允许 `standard`、`overload`、`deload`；省略时继承当天已有记录的类型，当天没有记录时为 `standard`。`--focus` 把动作记为本次重点推进目标并使当天为 `overload`，必须配合 `--overload-lever`；`--target` 保存用户说的目标原话。训练日类型的判定规则与 `overload_lever` 记录方式见 `knowledge/training-day-types.md`。
 
 ## 使用约束
 

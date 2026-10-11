@@ -279,6 +279,45 @@ class TrainLogbookTests(unittest.TestCase):
             path.write_text(json.dumps(dict(fixed, equipment=dict(fixed['equipment'], name='其他')), ensure_ascii=False) + '\n')
             run('validate', ok=False)
 
+    def test_focus_marks_overload_day(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            before = self.files(root)
+            run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '1', '--date', '2026-09-05', '--focus', ok=False)
+            run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '1', '--date', '2026-09-05', '--overload-lever', 'reps', ok=False)
+            run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '1', '--date', '2026-09-05',
+                '--focus', '--overload-lever', 'reps', '--day-type', 'standard', ok=False)
+            self.assertEqual(before, self.files(root))
+            r = run('add', '--exercise', '器械推胸', '--sets', '11x80', '--sequence', '1', '--date', '2026-09-05',
+                    '--focus', '--overload-lever', 'reps', '--target', '最重组多一次')
+            self.assertEqual(r['progression_target'], dict(lever='reps', target='最重组多一次', basis='user_reported'))
+            self.assertEqual(r['day_type'], 'overload')
+            other = run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '2', '--date', '2026-09-05')
+            self.assertEqual((other['day_type'], 'progression_target' in other), ('overload', False))
+            self.assertEqual(run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '1', '--date', '2026-09-06')['day_type'], 'standard')
+            self.assertEqual(run('validate')['status'], 'ok')
+            path = next(root.rglob('2026-09-06.jsonl'))
+            bad = json.loads(path.read_text())
+            bad['progression_target'] = dict(lever='reps', target=None, basis='user_reported')
+            path.write_text(json.dumps(bad, ensure_ascii=False) + '\n')
+            run('validate', ok=False)
+
+    def test_setup_list_reports_machines_without_setup(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '1', '--date', '2026-09-04', '--equipment', 'FORWARD', '--setup', '座椅=4')
+            run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '2', '--date', '2026-09-04', '--equipment', '蝴蝶机')
+            run('add', '--exercise', '哑铃侧平举', '--sets', '10x8', '--sequence', '3', '--date', '2026-09-04')
+            rows = run('setup')
+            self.assertEqual([(x['exercise_id'], x['status'], x['setup']) for x in rows],
+                             [('machine_chest_press', 'found', {'座椅': '4'}), ('pec_deck_fly', 'none', None)])
+            # The lookup ignores a type the name alone cannot reveal.
+            self.assertEqual(run('setup', '--exercise', 'FORWARD推胸', '--resolve-as', '器械推胸', '--equipment', 'FORWARD')['status'], 'found')
+            # Same brand, different machine (angle): no carry-over.
+            self.assertEqual(run('setup', '--exercise', '上斜推胸', '--resolve-as', '器械推胸', '--equipment', 'FORWARD')['status'], 'none')
+            run('add', '--exercise', '上斜推胸', '--resolve-as', '器械推胸', '--sets', '10x60', '--sequence', '4', '--date', '2026-09-04',
+                '--equipment', 'FORWARD', '--setup-same-as-last', ok=False)
+
     def test_shared_lock_does_not_get_stolen(self):
         with tempfile.TemporaryDirectory() as d:
             root,run=self.fixture(d)

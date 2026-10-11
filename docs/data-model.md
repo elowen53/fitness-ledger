@@ -130,6 +130,16 @@
 - `method`：`history_reported_name`（同一叫法历史中最常用值）、`history_equipment`（同一器械历史中唯一值）、`history_exercise`（同一动作历史中唯一值）、`name_unified`（用户给出的器械名被唯一一个更常用的历史名包含；`original` 保存原名）、`convention`（未说明左右默认双侧；或按用户规则由器械类型确定重量口径）。`support` 为支持该值的历史记录数。
 - 这是按用户规则得出的推定，不是用户当次原话；需要撤销时，按 `original` 恢复并删去对应键。
 
+## 重点推进目标（可选）
+
+```json
+"progression_target": {"lever": "reps", "target": "最重组多一次", "basis": "user_reported"}
+```
+
+- 只出现在用户指定的本次重点推进动作上；`lever` 为 `load` / `reps` / `sets` / `density`，`target` 是用户原话（可为 `null`），`basis` 为 `user_reported` 或 `planned`。
+- 有该字段的记录 `day_type` 必须是 `overload`。同日其他动作继承 `overload`，但没有该字段，表示维持或按状态完成。
+- 它记录的是意图，不代表已经实现；是否实现由 `report` 在可比时判断。
+
 ## 器械设置（可选）
 
 ```json
@@ -137,7 +147,7 @@
 ```
 
 - `values`：用户报告的设置，非空的文本键值对；键名不做全局枚举。
-- `source=reported`：用户本次报告；`same_as_previous`：用户确认与上次相同，`from_record` 指向被沿用的记录，该记录必须是同一动作、同一 `equipment`，日期不晚于本条，且设置值完全相同。
+- `source=reported`：用户本次报告；`same_as_previous`：用户确认与上次相同，`from_record` 指向被沿用的记录，该记录必须是同一动作、同一 `equipment`、同一 `variant.angle`（同品牌不同机器，如 HOIST 平推与上斜，按角度区分），日期不晚于本条，且设置值完全相同。
 - 未报告时省略，不从历史自动沿用。旧记录不回填。
 
 ## report 输出
@@ -149,5 +159,7 @@
 `comparability` 为 `comparable` / `limited` / `new_baseline`，`reasons` 解释门槛，`blocking_reasons` 是其中阻止数字判断的部分（休息改变、RIR 未知或改变、力竭方式改变、上次质量下降、次数或负重缺失）。`limited` 且没有阻断原因时仍输出数字结果，其余 reasons 作为注意事项。
 
 趋势只使用 `straight` / `top` 组：组结构和负重相同时输出 `reps_delta`；否则比较每侧“最重负荷的第一组”，输出 `top_load_delta` 和 `top_set_reps_delta`。`assessment` 可为 `reps_*`、`top_set_reps_*`、`load_increased`、`load_decreased`。负重下降且用户未明确说明质量保持，或有备注时次数下降，统一输出 `review_context`，以免把未结构化记录的质量优化当成退步。两次之间存在停训期时为 `new_baseline`（原因 `crosses_layoff`），停训前的负重和次数差值放在 `pre_layoff_reference`，仅作参考；没有停训、只是该动作相隔超过 21 天时加 `long_gap`。都会输出 `days_since_previous`。
+
+趋势另含：`progression_target`（最新一次的推进目标）；`target_lever_achieved`（可比且无阻断原因时，该变量是否提高：`reps` 看次数结论，`load` 看最重组重量，`sets` 看普通组数；`density` 及不可比时为 `null`）；`next_target`（下次建议，项目启发式）：`restore_quality`（上次报告质量下降）、`rebuild_baseline`（跨停训或复训期内）、`add_load`（连续两次最重组达到 12 次，加最小一档）、`add_rep`（同重量最重组多 1 次）。`next_target` 是计划，不写入日志。
 
 顶层 `layoffs` 列出停训期：日备注中 `training_status: "paused"` 的 `date`～`applies_through` 区间，与相邻训练日相隔超过 21 天的空档合并而成（`sources` 为 `day_note` / `training_gap`）。`return_phase` 描述最近一次停训后的复训：首次训练日、已练次数、距停训结束天数，`active` 表示仍在停训结束后 14 天内。`best_reps_by_load` 每项的 `before_last_layoff` 标明是否发生在最近一次停训前。`best_reps_by_load` 列出该可比键下每个负荷、每侧单组最多次数，仅作描述，不是 PR 判定。周训练量中 `primary_set_entries` 单列普通组和顶组；降重、递减、rest-pause、myo 组仍计入 `working_set_entries`。`assessment` 的次数增减只表示数字表现，不等于 PR、肌肉增长或处方；原始备注永远随候选历史返回供 Agent 阅读。详细决策与来源见 `knowledge/training-analysis.md`。

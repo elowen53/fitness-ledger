@@ -197,6 +197,28 @@ class AnalysisTests(unittest.TestCase):
         del b['setup']
         self.assertIn('setup_unknown', self.report([a, b])['trends'][0]['reasons'])
 
+    def test_progression_target_and_next_target(self):
+        a, b = record('2026-09-01', (11, 10)), record('2026-09-05', (12, 11))
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual(t['next_target'], dict(kind='add_rep', load={'bilateral': 40}, reps_goal={'bilateral': 13},
+                                                note='同重量，最重组多做 1 次'))
+        self.assertIsNone(t['progression_target'])
+        b['progression_target'] = dict(lever='reps', target=None, basis='user_reported')
+        t = self.report([a, b])['trends'][0]
+        self.assertTrue(t['target_lever_achieved'])  # 11 -> 12 on the same load profile
+        b['sets'][0]['reps'], b['sets'][1]['reps'] = 11, 10
+        self.assertFalse(self.report([a, b])['trends'][0]['target_lever_achieved'])
+        # Two sessions at the rep ceiling: add the smallest load step.
+        t = self.report([record('2026-09-01', (12, 10)), record('2026-09-05', (12, 9))])['trends'][0]
+        self.assertEqual(t['next_target']['kind'], 'add_load')
+        b['progression_target']['lever'] = 'load'
+        self.assertFalse(self.report([a, b])['trends'][0]['target_lever_achieved'])
+        b['analysis_context']['quality_change'] = 'degraded'
+        self.assertEqual(self.report([a, b])['trends'][0]['next_target']['kind'], 'restore_quality')
+        notes = [dict(date='2026-09-02', training_status='paused', applies_through='2026-09-04')]
+        t = build_report([a, record('2026-09-05', (12, 11))], CATALOG, '2026-09-05', notes)['trends'][0]
+        self.assertEqual((t['next_target']['kind'], t['target_lever_achieved']), ('rebuild_baseline', None))
+
     def test_add_context_keeps_existing_recording_semantics(self):
         import shutil
         with tempfile.TemporaryDirectory() as d:

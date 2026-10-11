@@ -16,6 +16,8 @@ MUSCLE_REGIONS = {'lats': 'back', 'back': 'back', 'traps': 'back',
 LONG_GAP_DAYS = 21
 # Project heuristic: the first two weeks after a layoff re-establish baselines.
 RETURN_PHASE_DAYS = 14
+# Project heuristic for next targets: the user's working range tops out around 12 reps.
+REP_CEILING = 12
 # Missing or differing context that makes a numeric verdict unsafe; other reasons are caveats.
 BLOCKING_REASONS = ('rest_changed', 'previous_quality_declined', 'effort_unknown', 'effort_changed',
                     'failure_mode_changed', 'rep_measurement_unavailable', 'load_unknown')
@@ -327,6 +329,46 @@ def compare(latest, previous, records, periods=()):
     return dict(comparability=status, reasons=reasons, blocking_reasons=blocking, assessment=assessment, **result)
 
 
+def lever_achieved(lever, comparison, latest, previous):
+    """Did the stated lever move in the comparable data? None when it cannot be judged."""
+    if previous is None or comparison['comparability'] == 'new_baseline' or comparison['blocking_reasons']:
+        return None
+    if lever == 'reps':
+        if comparison['assessment'] in ('reps_increased', 'top_set_reps_increased'):
+            return True
+        return False if comparison['assessment'] in ('reps_unchanged', 'reps_decreased', 'top_set_reps_unchanged',
+                                                      'top_set_reps_decreased') else None
+    if lever == 'load':
+        return comparison['top_load_delta'] > 0 if comparison['top_load_delta'] is not None else None
+    if lever == 'sets':
+        return len(primary_sets(latest)) > len(primary_sets(previous))
+    return None  # density needs rest data
+
+
+def next_target(group, comparison, phase):
+    """Double-progression suggestion for the next session (project heuristic, a plan not a fact)."""
+    latest = group[-1]
+    tops = top_sets(latest)
+    if not tops or any(s.get('weight_kg') is None for s in tops.values()):
+        return None
+    quality = (latest.get('analysis_context') or {}).get('quality_change')
+    load = {k or 'bilateral': s['weight_kg'] for k, s in tops.items()}
+    reps = {k or 'bilateral': s['reps'] for k, s in tops.items()}
+    if quality == 'degraded':
+        return dict(kind='restore_quality', load=load, reps_goal=reps, note='先恢复动作质量，重量和次数复现即可')
+    if 'crosses_layoff' in comparison['reasons'] or (phase and phase['active'] and record_date(latest) > phase['layoff']['end']):
+        return dict(kind='rebuild_baseline', load=load, reps_goal=reps, note='复训期：复现本次重量和次数，不追加')
+    previous_tops = top_sets(group[-2]) if len(group) > 1 and comparison['comparability'] != 'new_baseline' else {}
+    ready = all(s['reps'] >= REP_CEILING for s in tops.values()) and previous_tops and all(
+        k in previous_tops and previous_tops[k].get('weight_kg') == tops[k]['weight_kg'] and previous_tops[k]['reps'] >= REP_CEILING
+        for k in tops)
+    if ready:
+        return dict(kind='add_load', load=load, reps_goal=None,
+                    note='连续两次最重组达到 %d 次：加最小一档，次数允许回落' % REP_CEILING)
+    return dict(kind='add_rep', load=load, reps_goal={k: v + 1 for k, v in reps.items()},
+                note='同重量，最重组多做 1 次')
+
+
 def build_report(records, catalog, date, day_notes=None):
     end = datetime.strptime(date, '%Y-%m-%d').date()
     if end.isoformat() != date:
@@ -339,6 +381,7 @@ def build_report(records, catalog, date, day_notes=None):
     eligible.sort(key=lambda r: (record_date(r), r.get('sequence') or 0, r.get('id') or ''))
     catalog_map = {i['id']: i for i in catalog['exercises']}
     periods = layoff_periods(eligible, day_notes, date)
+    phase = return_phase(eligible, periods, date)
     windows = []
     for days in (7, 14):
         start = (end-timedelta(days=days-1)).isoformat()
@@ -377,18 +420,24 @@ def build_report(records, catalog, date, day_notes=None):
         if record_date(latest) < windows[1]['start']:
             continue
         previous = rs[-2] if len(rs) > 1 else None
+        comparison = compare(latest, previous, eligible, periods)
+        target = latest.get('progression_target')
         trends.append(dict(exercise_id=latest['exercise_id'], base_key=json.loads(key),
                            history=[snapshot(r) for r in rs[-3:][::-1]],
                            best_reps_by_load=best_reps_by_load(rs, periods),
-                           **compare(latest, previous, eligible, periods)))
+                           progression_target=target,
+                           target_lever_achieved=lever_achieved(target['lever'], comparison, latest, previous) if target else None,
+                           next_target=next_target(rs, comparison, phase),
+                           **comparison))
     trends.sort(key=lambda t: (t['exercise_id'], str(t['history'][0]['id'])))
     last_date = record_date(eligible[-1]) if eligible else None
     return dict(as_of=date, last_workout_date=last_date,
                 days_since_last_workout=(end-datetime.strptime(last_date, '%Y-%m-%d').date()).days if last_date else None,
-                layoffs=periods, return_phase=return_phase(eligible, periods, date),
+                layoffs=periods, return_phase=phase,
                 windows=windows, trends=trends,
                 guidance='Descriptive only; review quality, recovery and historical notes before changing the plan. No automatic PR, overload or deload. '
                          'Limited comparisons still show numbers; read every reason as a caveat. '
-                'After a layoff, compare post-return sessions with each other; pre-layoff numbers are reference only.',
+                'After a layoff, compare post-return sessions with each other; pre-layoff numbers are reference only. '
+                'next_target is a plan suggestion, never a recorded fact.',
                 counting_basis='Catalog primary_muscles only; overlapping muscles are not additive. Unpaired rounds remain visible; unknown rounds are not imputed. '
                                'Back-off, drop, rest-pause and myo sets count as working set entries; trends use straight/top sets only.')
