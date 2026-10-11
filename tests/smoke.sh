@@ -95,9 +95,9 @@ expect_eq "$count" "2" "stats 顺序角色分组数"
 seq_one_volume="$(python3 -c '
 import json, sys
 rows = json.loads(sys.argv[1])
-print([r["volume_kg"] for r in rows if r.get("sequence") == 1][0])
+print([r["volume_kg"] for r in rows if r.get("sequence_role") == "opener"][0])
 ' "$test_machine_stats")"
-expect_eq "$seq_one_volume" "930.0" "stats 顺序1训练量"
+expect_eq "$seq_one_volume" "930.0" "stats opener 训练量"
 
 report="$(run report --date 2026-08-06 --json)"
 expect_eq "$(json_get "$report" windows.0.working_set_entries)" "11" "report 工作组条数"

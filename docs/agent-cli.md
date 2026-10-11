@@ -11,9 +11,11 @@
 - `resolve`：对齐自然语言动作名称
 - `add`：追加一条训练动作记录
 - `resequence`：按记录 ID 修正动作顺序
+- `align`：按历史补全旧记录中未说明的器械和变体；默认只预览，`--apply` 写入，`--skip-id` 跳过待确认的记录
 - `recent`：查看最近记录
 - `stats`：按可比键汇总训练数据
 - `report`：只读的滚动 7/14 天肌群训练量和最近候选表现报告
+- `setup`：查询同一动作、同一器械最近一次记录的器械设置
 - `list`：列出动作词典
 - `validate`：校验词典和全部训练日志
 
@@ -39,6 +41,7 @@
 ./scripts/train-logbook.sh recent --limit 10 --json
 ./scripts/train-logbook.sh stats --exercise "器械推胸" --json
 ./scripts/train-logbook.sh list --json
+./scripts/train-logbook.sh setup --exercise "FORWARD推胸" --resolve-as "器械推胸" --equipment "FORWARD" --json
 ./scripts/train-logbook.sh validate --json
 
 ./scripts/train-logbook.sh resequence \
@@ -53,6 +56,10 @@
 - `30s`：30 秒计时组
 - `R:8x20` / `L:8x20`：右侧 / 左侧；脚本按同侧出现顺序保存 `round`
 - 使用 `--warmup-count 2`，将最前两组标记为热身组
+- 组类型前缀：`top:9x81`、`bo:11x65`（降重组）、`drop:8x20`、`rp:4x60`、`myo:5x40`；可与侧别组合，顺序不限，如 `R:drop:8x20`。未标为 `straight`
+- 半程：`8x20+3p`（位置未说明）、`8x20+3lp`（拉伸端）、`8x20+3sp`（收缩端）；保存为 `partial_reps` / `partial_position`，不计入 `reps`
+- 力竭方式：`10x45!t`（技术力竭）、`!a`（绝对力竭）、`!e`（力竭后延伸）；写在 `@RIR` 之后，例如 `10x45@0!a`。`!` 与 `@RIR>0` 冲突时拒绝写入
+- 组合示例：`9x81!t,bo:11x65+2lp`
 
 未报告 RIR 时，组格式不加 `@`；脚本读取 `profile/training-preferences.json` 已确认的默认偏好，只补工作组并保存 `rir_source=profile_default` 与偏好快照。用户当次明确报告 RIR 才使用 `@RIR`，保存为 `reported`。热身组不补默认值；没有已确认默认偏好时保持未知。不要把 Agent 自行补入的 `@0` 冒充当次报告。
 
@@ -81,6 +88,9 @@
 | 已确认执行标准版本（可选） | `--execution-standard` |
 | 用户报告的质量变化（可选） | `--quality-change` |
 | 实际统一组间休息秒数（可选） | `--rest-sec` |
+| 用户报告的器械设置（可选） | `--setup 座椅=4 靠垫=2` |
+| 用户确认与上次设置相同（可选） | `--setup-same-as-last` |
+| 不按历史补全器械/变体 | `--no-infer` |
 | JSON 输出 | `--json` |
 
 `--day-type` 允许 `standard`、`overload`、`deload`。训练日类型的判定规则与 `overload_lever` 记录方式见 `knowledge/training-day-types.md`。
@@ -91,7 +101,10 @@
 - 品牌、机型或临时描述不应污染动作别名；含义已确认时用 `--resolve-as` 保留原话并归一。
 - `add` 必须显式保存真实训练顺序，遗漏或重复时在写入前拒绝。多条记录全部写入后运行一次 `validate` 即可。
 - `resequence` 会重写包含目标记录的 JSONL 文件，只用于用户明确要求的最小纠错。
-- `stats` 默认按 `exercise_id + variant + equipment + sequence + weight_basis` 分组，跨组结果不能直接判定 PR 或退步。
+- `stats` 默认按 `exercise_id + variant + equipment + sequence_role + weight_basis` 分组，跨组结果不能直接判定 PR 或退步。
+- `--setup-same-as-last` 只在用户确认设置未变时使用；没有可沿用的历史设置时拒绝写入。
+- `add` 默认按历史补全未说明的器械和变体（规则见 `AGENTS.md`），补全内容保存在 `inferred_fields`。无法唯一补全时拒绝写入并列出候选和次数，Agent 应据此询问用户，再显式传入 `--equipment`/`--posture` 等，或在用户确认是新器械或不确定时使用 `--no-infer`。
+- `align --apply` 只填空值、写入 `inferred_fields` 来源并原子替换文件；写入前先预览并把有疑点的记录用 `--skip-id` 排除。
 - 不要把训练计划写入 `data/workouts/`，也不要自行提交 Git；是否提交或推送由用户明确授权。
 
 ## 训练分析

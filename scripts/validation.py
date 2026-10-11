@@ -2,7 +2,9 @@
 import math
 import re
 from datetime import datetime
-from analysis import context_errors, record_date
+from alignment import inferred_errors
+from analysis import (context_errors, record_date, SET_TYPES, FAILURE_MODES, PARTIAL_POSITIONS,
+                      SETUP_SOURCES)
 
 WEIGHT_BASES = ('unknown', 'per_implement', 'per_side', 'total', 'machine_display')
 
@@ -31,7 +33,7 @@ def valid_timestamp(value):
 
 
 def record_errors(records, catalog):
-    errors, ids, sequences, days = [], set(), set(), {}
+    errors, ids, sequences, days, setup_refs = [], set(), set(), {}, []
     items = {i['id']: i for i in catalog['exercises']}
     for r in records:
         if not isinstance(r, dict):
@@ -56,6 +58,7 @@ def record_errors(records, catalog):
         if item is None:
             fail('unknown exercise_id')
         errors.extend('%s: %s' % (rid, e) for e in context_errors(r.get('analysis_context')))
+        errors.extend('%s: %s' % (rid, e) for e in inferred_errors(r))
         performed = r.get('performed_at')
         if version == 2:
             if not valid_date(r.get('training_date')):
@@ -108,6 +111,16 @@ def record_errors(records, catalog):
             fail('laterality required')
         if not isinstance(r.get('equipment'), dict):
             fail('equipment must be an object')
+        setup = r.get('setup')
+        if setup is not None:
+            values = setup.get('values') if isinstance(setup, dict) else None
+            if (not isinstance(values, dict) or not values
+                    or not all(isinstance(k, str) and k.strip() and isinstance(x, str) and x.strip() for k, x in values.items())):
+                fail('setup.values must be a nonempty text map')
+            elif setup.get('source') not in SETUP_SOURCES:
+                fail('invalid setup.source')
+            elif setup['source'] == 'same_as_previous':
+                setup_refs.append((rid, r, setup))
         sets = r.get('sets')
         if not isinstance(sets, list) or not sets:
             fail('sets must be a nonempty array')
@@ -124,6 +137,24 @@ def record_errors(records, catalog):
             for field in ('warmup', 'bodyweight'):
                 if not isinstance(s.get(field), bool):
                     fail('set %s %s must be boolean' % (index, field))
+            set_type = s.get('set_type')
+            if set_type is not None and set_type not in SET_TYPES:
+                fail('invalid set %s set_type' % index)
+            elif s.get('warmup') and set_type not in (None, 'straight'):
+                fail('warmup set %s cannot have set_type %s' % (index, set_type))
+            partial = s.get('partial_reps')
+            if partial is not None and not number(partial, 1, integer=True):
+                fail('invalid set %s partial_reps' % index)
+            if s.get('partial_position') is not None and (s['partial_position'] not in PARTIAL_POSITIONS or partial is None):
+                fail('set %s partial_position requires partial_reps and lengthened/shortened' % index)
+            mode = s.get('failure_mode')
+            if mode is not None:
+                if mode not in FAILURE_MODES:
+                    fail('invalid set %s failure_mode' % index)
+                elif s.get('warmup'):
+                    fail('warmup set %s cannot have failure_mode' % index)
+                elif s.get('rir') not in (None, 0):
+                    fail('set %s failure_mode conflicts with rir > 0' % index)
             if s.get('reps') is None and s.get('duration_sec') is None:
                 fail('set %s needs reps or duration_sec' % index)
             side, rnd = s.get('side'), s.get('round')
@@ -153,4 +184,12 @@ def record_errors(records, catalog):
                     if (not isinstance(default, dict) or default.get('status') != 'user_confirmed'
                             or default.get('missing_means') != s.get('rir') or s.get('warmup')):
                         fail('profile_default requires matching confirmed snapshot and work set')
+    by_id = {r.get('id'): r for r in records if isinstance(r, dict)}
+    for rid, r, setup in setup_refs:
+        source = by_id.get(setup.get('from_record'))
+        if (source is None or source is r or record_date(source) > record_date(r)
+                or source.get('exercise_id') != r.get('exercise_id')
+                or source.get('equipment') != r.get('equipment')
+                or (source.get('setup') or {}).get('values') != setup['values']):
+            errors.append('%s: setup.from_record must be an earlier record of the same exercise and equipment with identical values' % rid)
     return errors

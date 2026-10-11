@@ -3,7 +3,7 @@
 """
 train_logbook.py - train-logbook 的 macOS CLI，使用 Python 3。
 
-Commands: resolve, add, resequence, recent, stats, report, list, validate
+Commands: resolve, add, resequence, align, recent, stats, report, setup, list, validate
 
 Example (macOS):
     ./scripts/train-logbook.sh add --exercise "上斜器械推胸" \
@@ -21,7 +21,8 @@ import uuid
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime
-from analysis import build_report, context_errors, QUALITY_CHANGES, record_date, weight_basis
+from alignment import infer
+from analysis import build_report, context_errors, QUALITY_CHANGES, record_date, sequence_role, weight_basis
 from validation import record_errors, WEIGHT_BASES, number, valid_date, valid_timestamp
 
 
@@ -225,15 +226,41 @@ def resolve_exercise(name, records=None, catalog=None, catalog_path=CATALOG_PATH
 # Set parsing
 # ---------------------------------------------------------------------------
 
+SIDE_TOKENS = {"右手": "right", "右": "right", "right": "right", "r": "right",
+               "左手": "left", "左": "left", "left": "left", "l": "left"}
+SET_TYPE_TOKENS = {"top": "top", "顶组": "top", "bo": "backoff", "backoff": "backoff", "降重": "backoff",
+                   "drop": "drop", "递减": "drop", "rp": "rest_pause", "rest-pause": "rest_pause",
+                   "休息暂停": "rest_pause", "myo": "myo"}
+FAILURE_TOKENS = {"t": "technical", "a": "absolute", "e": "extended"}
+PARTIAL_TOKENS = {"p": None, "lp": "lengthened", "sp": "shortened"}
+
+
 def parse_set(spec, warmup):
     text = spec.strip().lower()
     text = re.sub(r"公斤|千克", "kg", text)
     text = text.replace("次", "")
     side = None
-    m = re.match(r"^(右手|右|right|r|左手|左|left|l)\s*[:：]\s*(.+)$", text)
+    set_type = None
+    # Prefixes in any order: side (R:/L:) and set type (top:/bo:/drop:/rp:/myo:).
+    while True:
+        m = re.match(r"^([^:：]+?)\s*[:：]\s*(.+)$", text)
+        if not m:
+            break
+        token = m.group(1).strip()
+        if token in SIDE_TOKENS and side is None:
+            side = SIDE_TOKENS[token]
+        elif token in SET_TYPE_TOKENS and set_type is None:
+            set_type = SET_TYPE_TOKENS[token]
+        else:
+            raise SystemExit("无法解析组前缀 '%s'（组 '%s'）。" % (token, spec))
+        text = m.group(2).strip()
+    if warmup and set_type is not None:
+        raise SystemExit("热身组不能标组类型: '%s'。" % spec)
+
+    failure_mode = None
+    m = re.match(r"^(.*?)\s*!\s*([tae])$", text)
     if m:
-        side = "right" if m.group(1) in ("右手", "右", "right", "r") else "left"
-        text = m.group(2)
+        text, failure_mode = m.group(1), FAILURE_TOKENS[m.group(2)]
 
     parsed = {
         "reps": None,
@@ -244,30 +271,36 @@ def parse_set(spec, warmup):
         "warmup": warmup,
         "side": side,
         "round": None,
+        "set_type": set_type or "straight",
+        "partial_reps": None,
+        "partial_position": None,
+        "failure_mode": failure_mode,
     }
 
-    m = re.match(r"^(\d+)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:kg)?(?:\s*@\s*(\d+(?:\.\d+)?))?$", text)
+    partial = r"(?:\s*\+\s*(\d+)\s*(lp|sp|p))?"
+    rir = r"(?:\s*@\s*(\d+(?:\.\d+)?))?"
+    m = re.match(r"^(\d+)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(?:kg)?" + partial + rir + "$", text)
+    if not m:
+        m = re.match(r"^(\d+)\s*[x×*]\s*(bw|bodyweight|自重)" + partial + rir + "$", text)
+        if m:
+            parsed["bodyweight"] = True
     if m:
         parsed["reps"] = int(m.group(1))
-        parsed["weight_kg"] = float(m.group(2))
+        if not parsed["bodyweight"]:
+            parsed["weight_kg"] = float(m.group(2))
         if m.group(3):
-            parsed["rir"] = float(m.group(3))
-        return parsed
-
-    m = re.match(r"^(\d+)\s*[x×*]\s*(?:bw|bodyweight|自重)(?:\s*@\s*(\d+(?:\.\d+)?))?$", text)
-    if m:
-        parsed["reps"] = int(m.group(1))
-        parsed["bodyweight"] = True
-        if m.group(2):
-            parsed["rir"] = float(m.group(2))
+            parsed["partial_reps"] = int(m.group(3))
+            parsed["partial_position"] = PARTIAL_TOKENS[m.group(4)]
+        if m.group(5):
+            parsed["rir"] = float(m.group(5))
         return parsed
 
     m = re.match(r"^(\d+(?:\.\d+)?)\s*(?:s|秒)$", text)
-    if m:
+    if m and failure_mode is None:
         parsed["duration_sec"] = float(m.group(1))
         return parsed
 
-    raise SystemExit("无法解析组 '%s'。使用 12x40@2、12xbw 或 30s。" % spec)
+    raise SystemExit("无法解析组 '%s'。使用 12x40@2、bo:10x30、8x20+3lp、10x45!t、12xbw 或 30s。" % spec)
 
 
 # ---------------------------------------------------------------------------
@@ -392,7 +425,7 @@ def command_add(args):
             "grip": final_grip,
         },
         "equipment": {
-            "type": get_equipment_type(args.exercise, catalog_item.get("equipment_type")),
+            "type": get_equipment_type(args.exercise, None),
             "name": args.equipment if args.equipment else None,
         },
         "sets": parsed_sets,
@@ -400,11 +433,42 @@ def command_add(args):
         "tags": [t for t in (args.tags or []) if t.strip()],
     }
 
+    history = read_workout_records(args.workout_root)
+    if not args.no_infer:
+        # User rule: unstated equipment/variant follows the user's own most frequent history.
+        fills, ambiguous = infer(record, history)
+        if ambiguous:
+            raise SystemExit('以下字段无法从历史唯一补全，先向用户确认，或显式传参/--no-infer：\n' + '\n'.join(
+                '%s: %s' % (k, '，'.join('%s×%d' % kv for kv in v.items())) for k, v in ambiguous.items()))
+        for key, item in fills.items():
+            group, field = key.split('.')
+            record[group][field] = item['value']
+        if fills:
+            record['inferred_fields'] = fills
+    if record['equipment']['type'] is None:
+        record['equipment']['type'] = get_equipment_type(args.exercise, catalog_item.get("equipment_type"))
+    for field in ('angle', 'posture'):
+        assert_variant_allowed(catalog_item, field, record['variant'][field])
     if used_default:
         record['rir_default'] = default
     if context:
         record['analysis_context'] = context
-    errors = record_errors(read_workout_records(args.workout_root) + [record], catalog)
+    if args.setup and args.setup_same_as_last:
+        raise SystemExit('--setup 与 --setup-same-as-last 只能选一个。')
+    if args.setup:
+        values = {}
+        for item in args.setup:
+            key, sep, value = item.partition('=')
+            if not sep or not key.strip() or not value.strip():
+                raise SystemExit("器械设置格式为 键=值，例如 座椅=4：'%s'" % item)
+            values[key.strip()] = value.strip()
+        record['setup'] = {'values': values, 'source': 'reported', 'from_record': None}
+    elif args.setup_same_as_last:
+        last = last_setup_record(read_workout_records(args.workout_root), record['exercise_id'], record['equipment'], training_date)
+        if last is None:
+            raise SystemExit('没有同一动作和器械的已记录设置，无法沿用上次设置。')
+        record['setup'] = {'values': last['setup']['values'], 'source': 'same_as_previous', 'from_record': last['id']}
+    errors = record_errors(history + [record], catalog)
     if errors:
         raise SystemExit('\n'.join(errors))
 
@@ -419,11 +483,125 @@ def command_add(args):
         print(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
     else:
         print("已记录: %s [%s]" % (catalog_item.get("canonical_name"), catalog_item.get("id")))
+        for key, item in (record.get('inferred_fields') or {}).items():
+            print("按历史补全 %s=%s（%s，依据 %s 条）" % (key, item['value'], item['method'], item['support']))
         print("日期: %s；顺序: %s；组数: %d；文件: %s" % (
             training_date, record["sequence"], len(parsed_sets), path))
+        v = record["variant"]
         print("变体: angle=%s, posture=%s, laterality=%s, grip=%s；器械类型: %s；器械: %s" % (
-            final_angle, final_posture, final_laterality, final_grip,
-            record["equipment"]["type"], args.equipment or ""))
+            v["angle"], v["posture"], v["laterality"], v["grip"],
+            record["equipment"]["type"], record["equipment"]["name"] or ""))
+
+
+def last_setup_record(records, exercise_id, equipment, before_date=None):
+    """Most recent record of the same exercise and equipment that stored a setup."""
+    rows = [r for r in records if r.get('exercise_id') == exercise_id and r.get('equipment') == equipment
+            and (r.get('setup') or {}).get('values') and (before_date is None or record_date(r) <= before_date)]
+    rows.sort(key=lambda r: (record_date(r), r.get('sequence') or 0, r.get('id') or ''))
+    return rows[-1] if rows else None
+
+
+# ---------------------------------------------------------------------------
+# Command: align
+# ---------------------------------------------------------------------------
+
+def plan_alignment(records, skip_ids=()):
+    """Per-record fills for historical nulls, using every other record as evidence."""
+    plans = []
+    for record in records:
+        if record.get('id') in skip_ids:
+            continue
+        others = [r for r in records if r is not record]
+        fills, ambiguous = infer(record, others)
+        variant = record.get('variant') or {}
+        if variant.get('laterality') is None and not any(s.get('side') for s in record.get('sets') or []):
+            fills['variant.laterality'] = dict(value='bilateral', method='convention', support=None, original=None)
+        if fills or ambiguous:
+            plans.append(dict(id=record.get('id'), date=record_date(record), exercise_id=record.get('exercise_id'),
+                              reported_name=record.get('reported_name'), fills=fills, ambiguous=ambiguous))
+    return plans
+
+
+def command_align(args):
+    records = read_workout_records(args.workout_root)
+    plans = plan_alignment(records, set(args.skip_id or []))
+    applied = 0
+    if args.apply:
+        by_id = {p['id']: p for p in plans if p['fills']}
+        for record in records:
+            plan = by_id.get(record.get('id'))
+            if not plan:
+                continue
+            for key, item in plan['fills'].items():
+                group, field = key.split('.')
+                record.setdefault(group, {})[field] = item['value']
+            record['inferred_fields'] = dict(record.get('inferred_fields') or {}, **plan['fills'])
+        errors = record_errors(records, read_catalog(args.catalog_path))
+        if errors:
+            raise SystemExit('\n'.join(errors))
+        for dirpath, _, filenames in os.walk(args.workout_root):
+            for filename in sorted(filenames):
+                if not filename.endswith('.jsonl'):
+                    continue
+                path = os.path.join(dirpath, filename)
+                with open(path, encoding='utf-8-sig') as f:
+                    lines = f.read().splitlines()
+                changed = False
+                for i, line in enumerate(lines):
+                    if line.strip() and json.loads(line).get('id') in by_id:
+                        rid = json.loads(line)['id']
+                        lines[i] = json.dumps(next(r for r in records if r.get('id') == rid), ensure_ascii=False, separators=(',', ':'))
+                        changed = True
+                if changed:
+                    fd, temporary = tempfile.mkstemp(dir=dirpath, prefix='.align-')
+                    try:
+                        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                            f.write('\n'.join(lines) + '\n')
+                            f.flush()
+                            os.fsync(f.fileno())
+                        os.replace(temporary, path)
+                    finally:
+                        if os.path.exists(temporary):
+                            os.unlink(temporary)
+        applied = len(by_id)
+    result = dict(applied=applied, plans=plans)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
+        return
+    for p in plans:
+        print('%s %s %s（%s）' % (p['date'], p['id'], p['reported_name'], p['exercise_id']))
+        for key, item in p['fills'].items():
+            print('  补全 %s: %s -> %s（%s，依据 %s）' % (key, item['original'], item['value'], item['method'], item['support']))
+        for key, counts in p['ambiguous'].items():
+            print('  待确认 %s: %s' % (key, '，'.join('%s×%d' % kv for kv in counts.items())))
+    print('已写入 %d 条记录。' % applied if args.apply else '预览模式，未修改账本；确认后加 --apply。')
+
+
+# ---------------------------------------------------------------------------
+# Command: setup
+# ---------------------------------------------------------------------------
+
+def command_setup(args):
+    resolution = resolve_exercise(args.resolve_as or args.exercise, catalog_path=args.catalog_path,
+                                  workout_root=args.workout_root)
+    if resolution["status"] != "resolved":
+        raise SystemExit("动作名称未唯一解析（%s）。" % resolution["status"])
+    catalog = read_catalog(args.catalog_path)
+    item = next(i for i in catalog["exercises"] if i.get("id") == resolution["exercise"]["id"])
+    equipment = {"type": get_equipment_type(args.exercise, item.get("equipment_type")), "name": args.equipment or None}
+    last = last_setup_record(read_workout_records(args.workout_root), item["id"], equipment)
+    result = {"exercise_id": item["id"], "equipment": equipment,
+              "status": "found" if last else "none",
+              "setup": last["setup"]["values"] if last else None,
+              "record_id": last["id"] if last else None,
+              "date": record_date(last) if last else None}
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+    elif last:
+        print("上次设置 %s（%s）: %s" % (result["date"], result["record_id"],
+                                         "，".join("%s=%s" % kv for kv in result["setup"].items())))
+    else:
+        print("没有记录过 %s / %s 的器械设置。" % (item["id"], equipment["name"] or "-"))
 
 
 # ---------------------------------------------------------------------------
@@ -541,6 +719,8 @@ def command_resequence(args):
 
 def command_stats(args):
     records = read_workout_records(args.workout_root)
+    catalog_map = {i['id']: i for i in read_catalog(args.catalog_path)['exercises']}
+    roles = [(r, sequence_role(r, records, catalog_map)) for r in records]
     if args.exercise:
         resolution = resolve_exercise(args.exercise, records=records,
                                       catalog_path=args.catalog_path,
@@ -548,10 +728,10 @@ def command_stats(args):
         if resolution["status"] != "resolved":
             raise SystemExit("统计筛选动作未唯一解析。")
         exercise_id = resolution["exercise"]["id"]
-        records = [r for r in records if r.get("exercise_id") == exercise_id]
+        roles = [(r, role) for r, role in roles if r.get("exercise_id") == exercise_id]
 
     expanded = []
-    for record in records:
+    for record, role in roles:
         working_sets = [s for s in (record.get("sets") or []) if not s.get("warmup")]
         reps = sum(s["reps"] for s in working_sets if s.get("reps") is not None)
         volume = 0.0
@@ -568,7 +748,7 @@ def command_stats(args):
             "exercise_id": record.get("exercise_id"),
             "variant": variant_key,
             "equipment": equipment_name,
-            "sequence": record.get("sequence"),
+            "sequence_role": role,
             "weight_basis": weight_basis(record),
             "sessions": 1,
             "sets": len(working_sets),
@@ -578,13 +758,13 @@ def command_stats(args):
 
     groups = {}
     for row in expanded:
-        key = (row["exercise_id"], row["variant"], row["equipment"], row["sequence"], row["weight_basis"])
+        key = (row["exercise_id"], row["variant"], row["equipment"], row["sequence_role"], row["weight_basis"])
         if key not in groups:
             groups[key] = {
                 "exercise_id": row["exercise_id"],
                 "variant": row["variant"],
                 "equipment": row["equipment"],
-                "sequence": row["sequence"],
+                "sequence_role": row["sequence_role"],
                 "weight_basis": row["weight_basis"],
                 "entries": 0,
                 "sets": 0,
@@ -601,12 +781,11 @@ def command_stats(args):
     if args.json:
         print(json.dumps(rows, ensure_ascii=False, separators=(",", ":")))
     else:
-        rows.sort(key=lambda r: (r["exercise_id"] or "", r["variant"], r["equipment"],
-                                 r["sequence"] is None, r["sequence"]))
-        print("exercise_id\tvariant\tequipment\tsequence\tweight_basis\tentries\tsets\treps\tvolume_kg")
+        rows.sort(key=lambda r: (r["exercise_id"] or "", r["variant"], r["equipment"], r["sequence_role"]))
+        print("exercise_id\tvariant\tequipment\tsequence_role\tweight_basis\tentries\tsets\treps\tvolume_kg")
         for r in rows:
             print("%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s" % (
-                r["exercise_id"], r["variant"], r["equipment"], r["sequence"], r["weight_basis"],
+                r["exercise_id"], r["variant"], r["equipment"], r["sequence_role"], r["weight_basis"],
                 r["entries"], r["sets"], r["reps"], r["volume_kg"]))
 
 
@@ -708,6 +887,13 @@ def build_parser():
         p.add_argument("--execution-standard", dest="execution_standard", default=None, help="已确认的执行标准版本（可选）")
         p.add_argument("--quality-change", dest="quality_change", choices=QUALITY_CHANGES, default=None, help="用户明确报告的质量状态（可选）")
         p.add_argument("--rest-sec", dest="rest_sec", type=float, default=None, help="当次实际统一组间休息秒数（可选）")
+        p.add_argument("--setup", dest="setup", nargs="+", default=None, help="用户报告的器械设置，键=值，如 座椅=4")
+        p.add_argument("--setup-same-as-last", dest="setup_same_as_last", action="store_true",
+                       help="用户确认设置与上次同动作同器械相同")
+        p.add_argument("--no-infer", dest="no_infer", action="store_true",
+                       help="用户明确说明新器械/新做法或未知时，不按历史补全器械与变体")
+        p.add_argument("--apply", dest="apply", action="store_true", help="align 实际写入（默认只预览）")
+        p.add_argument("--skip-id", dest="skip_id", nargs="+", default=None, help="align 跳过的记录 ID")
         p.add_argument("--tags", dest="tags", nargs="+", default=None, help="标签")
         p.add_argument("--day-type", dest="day_type", default="standard",
                        choices=("standard", "overload", "deload"), help="standard/overload/deload")
@@ -720,7 +906,7 @@ def build_parser():
         p.add_argument("--project-root", dest="project_root", default=PROJECT_ROOT,
                        help="仓库根目录(默认脚本上级目录)")
 
-    for name in ("resolve", "add", "resequence", "recent", "stats", "report", "validate", "list"):
+    for name in ("resolve", "add", "resequence", "align", "recent", "stats", "report", "setup", "validate", "list"):
         p = sub.add_parser(name, help="train-logbook %s" % name)
         add_common(p)
     return parser
@@ -756,6 +942,12 @@ def main(argv=None):
     elif args.command == "add":
         with write_lock(args.project_root):
             command_add(args)
+    elif args.command == "align":
+        if args.apply:
+            with write_lock(args.project_root):
+                command_align(args)
+        else:
+            command_align(args)
     elif args.command == "recent":
         command_recent(args)
     elif args.command == "resequence":
@@ -770,6 +962,8 @@ def main(argv=None):
         except ValueError as error:
             raise SystemExit(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=None if args.json else 2))
+    elif args.command == "setup":
+        command_setup(args)
     elif args.command == "list":
         command_list(args)
     elif args.command == "validate":

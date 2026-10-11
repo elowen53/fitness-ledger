@@ -20,6 +20,7 @@ def record(date, reps=(10, 8), weight=40, **changes):
              reported_name='press', sequence=1, day_type='standard', notes=None, weight_basis='total',
              variant=dict(angle='flat', posture='seated', laterality='bilateral', grip=None),
              equipment=dict(type='machine', name='A'),
+             setup=dict(values={'seat': '4'}, source='reported', from_record=None),
              analysis_context=dict(session_template='push', execution_standard='full-v1',
                                    quality_change='maintained', rest_sec=180),
              sets=[dict(reps=n, weight_kg=weight, rir=0, warmup=False,
@@ -114,6 +115,62 @@ class AnalysisTests(unittest.TestCase):
         a, b = record('2026-09-01'), record('2026-09-05')
         a['analysis_context']['quality_change'] = 'degraded'
         self.assertEqual(self.report([a, b])['trends'][0]['comparability'], 'limited')
+
+    def test_sequence_role_replaces_raw_position(self):
+        catalog = {'exercises': CATALOG['exercises'] + [{'id': 'row', 'primary_muscles': ['back']}]}
+        a = record('2026-09-01', sequence=3)
+        b = record('2026-09-05', sequence=2, reps=(11, 8))
+        rows = [record('2026-09-01', exercise_id='row', sequence=1), record('2026-09-01', exercise_id='raise', sequence=2), a,
+                record('2026-09-05', exercise_id='row', sequence=1), b]
+        t = next(t for t in build_report(rows, catalog, '2026-09-05')['trends'] if t['exercise_id'] == 'press')
+        self.assertEqual(t['base_key'][-2], 'muscle_first')
+        self.assertEqual(len(t['history']), 2)
+        # Preceding same-muscle work or opening the session is a different role.
+        rows.append(record('2026-09-05', exercise_id='press', sequence=3, equipment=dict(type='machine', name='A')))
+        roles = sorted(t['base_key'][-2] for t in build_report(rows, catalog, '2026-09-05')['trends'] if t['exercise_id'] == 'press')
+        self.assertEqual(roles, ['muscle_after', 'muscle_first'])
+
+    def test_limited_comparison_still_reports_numbers(self):
+        a, b = record('2026-09-01'), record('2026-09-05', (12, 9))
+        for r in (a, b):
+            del r['analysis_context']
+        b['notes'] = '状态不错'
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual(t['comparability'], 'limited')
+        self.assertEqual(t['blocking_reasons'], [])
+        self.assertEqual((t['assessment'], t['reps_delta']), ('reps_increased', 3))
+        b['sets'][0]['weight_kg'] = 45
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual((t['assessment'], t['top_load_delta'], t['top_set_reps_delta']), ('load_increased', 5, 2))
+        for x in b['sets']:
+            x['weight_kg'] = 30
+        self.assertEqual(self.report([a, b])['trends'][0]['assessment'], 'review_context')
+        b['analysis_context'] = dict(quality_change='maintained')
+        self.assertEqual(self.report([a, b])['trends'][0]['assessment'], 'load_decreased')
+        b = record('2026-10-20', (12, 9))
+        t = self.report([a, b], '2026-10-20')['trends'][0]
+        self.assertIn('long_gap', t['reasons'])
+        self.assertEqual(t['days_since_previous'], 49)
+
+    def test_set_types_failure_mode_and_setup(self):
+        a, b = record('2026-09-01'), record('2026-09-05', (11,))
+        b['sets'].append(dict(reps=15, weight_kg=25, rir=0, warmup=False, bodyweight=False, side=None, round=None, set_type='backoff'))
+        r = self.report([a, b])
+        t = r['trends'][0]
+        self.assertEqual((t['assessment'], t['top_set_reps_delta']), ('top_set_reps_increased', 1))
+        self.assertEqual(r['windows'][0]['muscles'][0]['working_set_entries'], 4)
+        self.assertEqual(r['windows'][0]['muscles'][0]['primary_set_entries'], 3)
+        self.assertEqual(t['best_reps_by_load'][0], dict(side=None, load=40, reps=11, date='2026-09-05', record_id='2026-09-05'))
+        a['sets'][0]['failure_mode'] = 'technical'
+        b['sets'][0]['failure_mode'] = 'absolute'
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual((t['assessment'], t['blocking_reasons']), ('review_context', ['failure_mode_changed']))
+        a, b = record('2026-09-01'), record('2026-09-05')
+        b['setup'] = dict(values={'seat': '5'}, source='reported', from_record=None)
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual((t['comparability'], t['assessment']), ('new_baseline', 'establish_baseline'))
+        del b['setup']
+        self.assertIn('setup_unknown', self.report([a, b])['trends'][0]['reasons'])
 
     def test_add_context_keeps_existing_recording_semantics(self):
         import shutil

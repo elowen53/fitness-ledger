@@ -153,6 +153,100 @@ class TrainLogbookTests(unittest.TestCase):
             self.assertEqual([r['sequence'] for r in run('recent')][:2],[2,3])
             self.assertEqual(path.read_bytes(),original)
 
+    def test_set_notation_and_failure_modes(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            r = self.add(run, sets='9x81!t,bo:11x65,12xbw+2sp')
+            u = self.add(run, sequence='3', exercise='Y举', sets='R:drop:8x20+3lp@0,drop:l:8x20+1p!e')
+            got = [(s['set_type'], s['side'], s['weight_kg'], s['partial_reps'], s['partial_position'], s['failure_mode'], s['rir'])
+                   for s in r['sets'] + u['sets']]
+            self.assertEqual(got, [('straight', None, 81.0, None, None, 'technical', 0),
+                                   ('backoff', None, 65.0, None, None, None, 0),
+                                   ('straight', None, None, 2, 'shortened', None, 0),
+                                   ('drop', 'right', 20.0, 3, 'lengthened', None, 0),
+                                   ('drop', 'left', 20.0, 1, None, 'extended', 0)])
+            before = self.files(root)
+            for bad in ['10x40@1!a', 'zz:10x40', '30s!t', 'bo:bo:10x40']:
+                run('add', '--exercise', '器械推胸', '--sets', bad, '--sequence', '2', '--date', '2026-09-05', ok=False)
+            run('add', '--exercise', '器械推胸', '--sets', 'bo:8x20,10x40', '--warmup-count', '1', '--sequence', '2', '--date', '2026-09-05', ok=False)
+            self.assertEqual(before, self.files(root))
+            self.assertEqual(run('validate')['status'], 'ok')
+
+    def test_setup_reported_and_carried_forward(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            run('add', '--exercise', '器械推胸', '--sets', '10x40', '--sequence', '1', '--date', '2026-09-04',
+                '--equipment', 'FORWARD', '--setup-same-as-last', ok=False)
+            first = run('add', '--exercise', '器械推胸', '--sets', '10x40', '--sequence', '1', '--date', '2026-09-04',
+                        '--equipment', 'FORWARD', '--setup', '座椅=4', '靠垫=2')
+            self.assertEqual(first['setup'], dict(values={'座椅': '4', '靠垫': '2'}, source='reported', from_record=None))
+            found = run('setup', '--exercise', '器械推胸', '--equipment', 'FORWARD')
+            self.assertEqual((found['status'], found['setup']['座椅']), ('found', '4'))
+            self.assertEqual(run('setup', '--exercise', '器械推胸', '--equipment', 'HOIST')['status'], 'none')
+            second = run('add', '--exercise', '器械推胸', '--sets', '11x40', '--sequence', '1', '--date', '2026-09-05',
+                         '--equipment', 'FORWARD', '--setup-same-as-last')
+            self.assertEqual(second['setup']['from_record'], first['id'])
+            run('add', '--exercise', '器械推胸', '--sets', '11x40', '--sequence', '2', '--date', '2026-09-05',
+                '--equipment', 'FORWARD', '--setup', '座椅', ok=False)
+            self.assertEqual(run('validate')['status'], 'ok')
+            path = next(root.rglob('2026-09-05.jsonl'))
+            bad = dict(second, setup=dict(second['setup'], values={'座椅': '5'}))
+            path.write_text(json.dumps(bad, ensure_ascii=False) + '\n')
+            run('validate', ok=False)
+
+    def test_unstated_equipment_follows_history(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            for day in ('01', '02'):
+                run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-' + day,
+                    '--equipment', '蝴蝶机', '--posture', 'seated')
+            r = run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-03')
+            self.assertEqual((r['equipment']['name'], r['variant']['posture']), ('蝴蝶机', 'seated'))
+            self.assertEqual(r['inferred_fields']['equipment.name']['method'], 'history_reported_name')
+            r = run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-04', '--no-infer')
+            self.assertIsNone(r['equipment']['name'])
+            self.assertNotIn('inferred_fields', r)
+            # A stated name contained in one more frequent historical name is unified.
+            r = run('add', '--exercise', '夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-05', '--equipment', '蝴蝶')
+            self.assertEqual(r['inferred_fields']['equipment.name'], dict(value='蝴蝶机', method='name_unified', support=3, original='蝴蝶'))
+            # Several machines for the same exercise and an unseen name: ask, do not guess.
+            run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '2', '--date', '2026-09-01', '--equipment', 'FORWARD')
+            run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '2', '--date', '2026-09-02', '--equipment', 'HOIST')
+            # A more specific name is kept, not collapsed into the brand.
+            r = run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '2', '--date', '2026-09-03', '--equipment', 'HOIST 上斜')
+            self.assertEqual(r['equipment']['name'], 'HOIST 上斜')
+            before = self.files(root)
+            result = run('add', '--exercise', '坐姿推胸机', '--sets', '10x80', '--sequence', '2', '--date', '2026-09-05', ok=False)
+            self.assertIn('equipment.name', result.stderr)
+            self.assertEqual(before, self.files(root))
+            r = run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '2', '--date', '2026-09-05', '--equipment', '诺德士')
+            self.assertEqual(r['equipment']['name'], '诺德士')
+            self.assertEqual(run('validate')['status'], 'ok')
+
+    def test_align_backfills_history_with_provenance(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            a = run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-01', '--no-infer')
+            run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-02', '--equipment', '蝴蝶机')
+            path = next(root.rglob('2026-09-01.jsonl'))
+            legacy = dict(a, schema_version=1, performed_at='2026-09-01T12:00:00+08:00', variant=dict(a['variant'], laterality=None))
+            for key in ('training_date', 'recorded_at'):
+                legacy.pop(key)
+            path.write_text(json.dumps(legacy, ensure_ascii=False) + '\n')
+            before = self.files(root)
+            plan = run('align')
+            self.assertEqual(before, self.files(root))
+            self.assertEqual(set(plan['plans'][0]['fills']), {'equipment.name', 'variant.laterality'})
+            self.assertEqual(run('align', '--apply', '--skip-id', a['id'])['applied'], 0)
+            self.assertEqual(run('align', '--apply')['applied'], 1)
+            fixed = json.loads(path.read_text())
+            self.assertEqual((fixed['equipment']['name'], fixed['variant']['laterality']), ('蝴蝶机', 'bilateral'))
+            self.assertEqual(fixed['sets'], a['sets'])
+            self.assertEqual(run('align')['plans'], [])
+            self.assertEqual(run('validate')['status'], 'ok')
+            path.write_text(json.dumps(dict(fixed, equipment=dict(fixed['equipment'], name='其他')), ensure_ascii=False) + '\n')
+            run('validate', ok=False)
+
     def test_shared_lock_does_not_get_stolen(self):
         with tempfile.TemporaryDirectory() as d:
             root,run=self.fixture(d)

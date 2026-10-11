@@ -41,6 +41,9 @@
 - kg 是唯一外部负重单位；自重动作使用 `bodyweight=true`，不把体重伪装成外部负重。
 - 外部负重总量只计算非热身且同时有 `reps`、`weight_kg` 的组。工作组条数另行计算，包含自重与计时工作组；不以缺少外部负重排除肌群训练组数。
 - 单侧动作的 `side` 使用 `left | right`，`round` 表示该侧、该阶段的第几轮；新记录中热身组与工作组分别从 1 编号，不相互挤占。旧记录不自动重编号。双侧动作两者均为 `null`。
+- 每组 `set_type`：`straight`（普通工作组，新记录默认）、`top`、`backoff`、`drop`、`rest_pause`、`myo`。旧记录缺少该字段，按 `straight` 读取，不回填。热身组只允许 `straight` 或缺省。
+- `partial_reps`：完整次数之后额外的半程次数（正整数），不计入 `reps`；`partial_position` 为 `lengthened`、`shortened` 或 `null`（未说明）。
+- `failure_mode`：`technical`、`absolute`、`extended` 或 `null`，只记录用户明确说明的力竭方式；不能用于热身组，也不能与 `rir > 0` 同时出现。
 - 会影响动作可比性的握法保存在 `variant.grip`。例如窄距对握为 `narrow_neutral`，宽距为 `wide`。
 - `equipment.type` 保存 `machine / cable / barbell / dumbbell / bodyweight` 等可比较的器械大类。
 - `equipment.name` 不做全局枚举，因为同一器械在不同健身房可能有不同标识。
@@ -70,7 +73,8 @@
 - `exercise_id` 是同一基本动作跨日期、跨叫法保持不变的唯一身份；`reported_name` 是用户当次原话，不承担唯一性。
 - 新记录写入前，解析器同时匹配词典规范名/别名和历史 `reported_name`。命中历史叫法时仍返回原 `exercise_id`，但不会因此自动污染全局别名。
 - 名称不同但存在合理的同动作候选时，需要用户确认对齐；确认无法归入已有动作后才创建新 ID。
-- 默认趋势键为 `exercise_id + variant.angle + variant.posture + variant.laterality + variant.grip + equipment.type + equipment.name + sequence + weight_basis`。其中 `sequence` 表示本次训练内的顺序角色；不同趋势键不直接比较重量或 PR。
+- 默认趋势键为 `exercise_id + variant.angle + variant.posture + variant.laterality + variant.grip + equipment.type + equipment.name + sequence_role + weight_basis`；不同趋势键不直接比较重量或 PR。
+- `sequence_role` 在分析时由实际 `sequence` 推导，不写入日志：`opener`（第 1 个动作）、`muscle_first`（同日之前没有同部位动作）、`muscle_after`（同日之前已有同部位动作）、`unknown`（自身或同日记录缺少顺序）。“同部位”按词典 `primary_muscles` 判断，`lats/back/traps` 归为背部，三角肌各束归为肩部；这是项目启发式。
 - `resolve` 返回的候选包含 `matched_source`：`catalog` 表示命中词典，`history` 表示命中过往日志中的原始叫法。
 
 ## 用户自定义动作
@@ -114,10 +118,34 @@
 - `rest_sec`：大于零的有限数值，表示本动作实际统一组间休息秒数，不是计划目标。各组不同或只有部分组已知时省略此字段，在 `notes` 保留详情，不填平均值。
 - 旧记录缺少字段或值为 `null` 不补写；新上下文内部只保存已知值。`validate` 会检查新增已提供字段。
 
+## 按历史补全的字段（inferred_fields）
+
+```json
+"inferred_fields": {
+  "equipment.name": {"value": "蝴蝶机", "method": "history_reported_name", "support": 5, "original": null}
+}
+```
+
+- 只出现在被补全的记录中，键为 `equipment.name`、`equipment.type`、`variant.angle`、`variant.posture`、`variant.grip`、`variant.laterality`。`value` 必须等于记录当前值，`validate` 会检查。
+- `method`：`history_reported_name`（同一叫法历史中最常用值）、`history_equipment`（同一器械历史中唯一值）、`history_exercise`（同一动作历史中唯一值）、`name_unified`（用户给出的器械名被唯一一个更常用的历史名包含；`original` 保存原名）、`convention`（未说明左右默认双侧）。`support` 为支持该值的历史记录数。
+- 这是按用户规则得出的推定，不是用户当次原话；需要撤销时，按 `original` 恢复并删去对应键。
+
+## 器械设置（可选）
+
+```json
+"setup": {"values": {"座椅": "4", "靠垫": "2"}, "source": "reported", "from_record": null}
+```
+
+- `values`：用户报告的设置，非空的文本键值对；键名不做全局枚举。
+- `source=reported`：用户本次报告；`same_as_previous`：用户确认与上次相同，`from_record` 指向被沿用的记录，该记录必须是同一动作、同一 `equipment`，日期不晚于本条，且设置值完全相同。
+- 未报告时省略，不从历史自动沿用。旧记录不回填。
+
 ## report 输出
 
 `report` 只读，不是新账本格式。`windows` 为含结束日的滚动 7/14 天；`trends` 仅列最近 14 天出现过的基础键，各含最近三次候选 `history`（新到旧，可早于窗口）。`--date` 控制截止日，默认本机今天，不自动回拨到最后训练日；晚于截止日的记录不计入。
 
 每肌群输出工作组条数、训练轮数、左右侧组数、完整/不完整轮次、缺失 round 条数与训练频率；同一组可属于词典中的多个主要肌群，不能将各肌群组数直接相加。没有记录的日期照旧列为休息日期，不推断恢复状态。
 
-`comparability` 为 `comparable` / `limited` / `new_baseline`，`reasons` 解释门槛；`reps_delta` 仅在执行和组条件可比时输出。`assessment` 的次数增减只表示数字表现，不等于 PR、肌肉增长或处方；原始备注永远随候选历史返回供 Agent 阅读。详细决策与来源见 `knowledge/training-analysis.md`。
+`comparability` 为 `comparable` / `limited` / `new_baseline`，`reasons` 解释门槛，`blocking_reasons` 是其中阻止数字判断的部分（休息改变、RIR 未知或改变、力竭方式改变、上次质量下降、次数或负重缺失）。`limited` 且没有阻断原因时仍输出数字结果，其余 reasons 作为注意事项。
+
+趋势只使用 `straight` / `top` 组：组结构和负重相同时输出 `reps_delta`；否则比较每侧“最重负荷的第一组”，输出 `top_load_delta` 和 `top_set_reps_delta`。`assessment` 可为 `reps_*`、`top_set_reps_*`、`load_increased`、`load_decreased`。负重下降且用户未明确说明质量保持，或有备注时次数下降，统一输出 `review_context`，以免把未结构化记录的质量优化当成退步。两次相隔超过 21 天时加 `long_gap`，并输出 `days_since_previous`。`best_reps_by_load` 列出该可比键下每个负荷、每侧单组最多次数，仅作描述，不是 PR 判定。周训练量中 `primary_set_entries` 单列普通组和顶组；降重、递减、rest-pause、myo 组仍计入 `working_set_entries`。`assessment` 的次数增减只表示数字表现，不等于 PR、肌肉增长或处方；原始备注永远随候选历史返回供 Agent 阅读。详细决策与来源见 `knowledge/training-analysis.md`。

@@ -22,6 +22,13 @@
       "status": "user_confirmed",
       "confirmed_on": "2026-08-05"
     },
+    "equipment_variant_inference": {
+      "unstated_means": "most_frequent_history",
+      "ask_when_uncertain": true,
+      "meaning": "用户没有说是新动作或新器械时，未说明的器械和变体按本人历史中最常用的补全；不能确定时询问用户对齐。",
+      "status": "user_confirmed",
+      "confirmed_on": "2026-10-11"
+    },
     "rir_default": {
       "missing_means": 0,
       "meaning": "用户确认所有工作组均为力竭；未报告 RIR 时默认按 0 记录，不再询问。",

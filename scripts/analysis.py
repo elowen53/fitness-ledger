@@ -4,7 +4,19 @@ import json
 import math
 
 QUALITY_CHANGES = ('maintained', 'improved', 'improved_with_load_reduction', 'degraded')
-SET_FIELDS = ('side', 'round', 'weight_kg', 'bodyweight', 'duration_sec', 'rir')
+SET_TYPES = ('straight', 'top', 'backoff', 'drop', 'rest_pause', 'myo')
+# Legacy sets have no set_type and are read as straight sets.
+PRIMARY_SET_TYPES = (None, 'straight', 'top')
+FAILURE_MODES = ('technical', 'absolute', 'extended')
+PARTIAL_POSITIONS = ('lengthened', 'shortened')
+SETUP_SOURCES = ('reported', 'same_as_previous')
+# Project heuristic: muscles that share a region count as "already trained" for sequence roles.
+MUSCLE_REGIONS = {'lats': 'back', 'back': 'back', 'traps': 'back',
+                  'front_delts': 'shoulders', 'side_delts': 'shoulders', 'rear_delts': 'shoulders', 'shoulders': 'shoulders'}
+LONG_GAP_DAYS = 21
+# Missing or differing context that makes a numeric verdict unsafe; other reasons are caveats.
+BLOCKING_REASONS = ('rest_changed', 'previous_quality_declined', 'effort_unknown', 'effort_changed',
+                    'failure_mode_changed', 'rep_measurement_unavailable', 'load_unknown')
 
 
 def context_errors(context):
@@ -38,9 +50,41 @@ def work_sets(record):
     return [s for s in record.get('sets', []) if not s.get('warmup')]
 
 
-def base_key(record):
+def primary_sets(record):
+    return [s for s in work_sets(record) if s.get('set_type') in PRIMARY_SET_TYPES]
+
+
+def setup_values(record):
+    return ((record.get('setup') or {}).get('values')) or None
+
+
+def identity_key(record):
     v, e = record.get('variant') or {}, record.get('equipment') or {}
-    return [record.get('exercise_id')] + [v.get(k) for k in ('angle', 'posture', 'laterality', 'grip')] + [e.get('type'), e.get('name'), record.get('sequence'), weight_basis(record)]
+    return [record.get('exercise_id')] + [v.get(k) for k in ('angle', 'posture', 'laterality', 'grip')] + [e.get('type'), e.get('name')]
+
+
+def regions(record, catalog_map):
+    muscles = catalog_map.get(record.get('exercise_id'), {}).get('primary_muscles', [])
+    return {MUSCLE_REGIONS.get(m, m) for m in muscles}
+
+
+def sequence_role(record, records, catalog_map):
+    """opener / muscle_first / muscle_after / unknown, from the actual same-day order."""
+    seq = record.get('sequence')
+    if seq is None:
+        return 'unknown'
+    if seq == 1:
+        return 'opener'
+    same_day = [r for r in records if r is not record and record_date(r) == record_date(record)]
+    if any(r.get('sequence') is None for r in same_day):
+        return 'unknown'
+    mine = regions(record, catalog_map)
+    earlier = [r for r in same_day if r['sequence'] < seq]
+    return 'muscle_after' if any(regions(r, catalog_map) & mine for r in earlier) else 'muscle_first'
+
+
+def base_key(record, role):
+    return identity_key(record) + [role, weight_basis(record)]
 
 
 def set_metrics(record):
@@ -54,6 +98,7 @@ def set_metrics(record):
     return dict(working_set_entries=len(sets), working_rounds=bilateral + union,
                 bilateral_sets=bilateral, left_sets=len(sides['left']), right_sets=len(sides['right']),
                 paired_rounds=paired, unpaired_rounds=union-paired, unknown_round_entries=missing,
+                primary_set_entries=sum(s.get('set_type') in PRIMARY_SET_TYPES for s in sets),
                 reps=sum(s.get('reps') or 0 for s in sets),
                 external_volume_kg=sum((s.get('weight_kg') or 0)*(s.get('reps') or 0) for s in sets))
 
@@ -61,7 +106,7 @@ def set_metrics(record):
 def snapshot(record):
     return dict(id=record.get('id'), date=record_date(record),
                 sequence=record.get('sequence'), weight_basis=weight_basis(record), reported_name=record.get('reported_name'),
-                notes=record.get('notes'), analysis_context=record.get('analysis_context'),
+                notes=record.get('notes'), analysis_context=record.get('analysis_context'), setup=record.get('setup'),
                 sets=work_sets(record), **set_metrics(record))
 
 
@@ -71,25 +116,101 @@ def preceding(record, records):
     if seq is None or any(r.get('sequence') is None for r in same_day):
         return None
     earlier = sorted([r for r in same_day if r['sequence'] < seq], key=lambda r: r['sequence'])
-    return [dict(key=base_key(r), sets=work_sets(r), context=r.get('analysis_context'), notes=r.get('notes')) for r in earlier]
+    return [dict(key=identity_key(r), sets=work_sets(r), context=r.get('analysis_context'), notes=r.get('notes')) for r in earlier]
+
+
+def load_of(s):
+    return 'bw' if s.get('bodyweight') else s.get('weight_kg')
+
+
+def top_sets(record):
+    """First primary set at the heaviest load, per side (None for bilateral)."""
+    result = {}
+    for side in sorted({s.get('side') for s in primary_sets(record)}, key=str):
+        sets = [s for s in primary_sets(record) if s.get('side') == side and s.get('reps') is not None]
+        loads = [s.get('weight_kg') for s in sets if s.get('weight_kg') is not None]
+        if not sets:
+            continue
+        top = max(loads) if loads else None
+        result[side] = next(s for s in sets if s.get('weight_kg') == top)
+    return result
+
+
+def performance(latest, previous):
+    a, b = primary_sets(latest), primary_sets(previous)
+    profile = lambda sets: [(s.get('side'), load_of(s)) for s in sets]
+    if profile(a) == profile(b):
+        delta = sum(s.get('reps') or 0 for s in a) - sum(s.get('reps') or 0 for s in b)
+        return dict(reps_delta=delta, top_load_delta=0, top_set_reps_delta=None,
+                    assessment='reps_increased' if delta > 0 else ('reps_unchanged' if delta == 0 else 'reps_decreased'))
+    ta, tb = top_sets(latest), top_sets(previous)
+    sides = sorted(set(ta) & set(tb), key=str)
+    if not sides:
+        return dict(reps_delta=None, top_load_delta=None, top_set_reps_delta=None, assessment='review_context')
+    load_deltas = [load_of(ta[k]) - load_of(tb[k]) for k in sides
+                   if isinstance(load_of(ta[k]), (int, float)) and isinstance(load_of(tb[k]), (int, float))]
+    if len(load_deltas) != len(sides) and any(load_of(ta[k]) != load_of(tb[k]) for k in sides):
+        return dict(reps_delta=None, top_load_delta=None, top_set_reps_delta=None, assessment='review_context')
+    load_delta = load_deltas[0] if load_deltas and len(set(load_deltas)) == 1 else (0 if not load_deltas else None)
+    reps = {k: ta[k]['reps'] - tb[k]['reps'] for k in sides}
+    reps_out = reps[None] if list(reps) == [None] else {k: v for k, v in reps.items()}
+    if load_delta is None:
+        assessment = 'review_context'
+    elif load_delta > 0:
+        assessment = 'load_increased'
+    elif load_delta < 0:
+        assessment = 'load_decreased'
+    elif all(v > 0 for v in reps.values()):
+        assessment = 'top_set_reps_increased'
+    elif all(v == 0 for v in reps.values()):
+        assessment = 'top_set_reps_unchanged'
+    elif all(v < 0 for v in reps.values()):
+        assessment = 'top_set_reps_decreased'
+    else:
+        assessment = 'top_set_reps_mixed'
+    return dict(reps_delta=None, top_load_delta=load_delta, top_set_reps_delta=reps_out, assessment=assessment)
+
+
+def best_reps_by_load(group):
+    """Best single primary-set reps per side and load within one comparable key; not a PR claim."""
+    best = {}
+    for r in group:
+        for s in primary_sets(r):
+            if s.get('reps') is None or (s.get('weight_kg') is None and not s.get('bodyweight')):
+                continue
+            key = (s.get('side'), load_of(s))
+            if key not in best or s['reps'] > best[key]['reps']:
+                best[key] = dict(side=s.get('side'), load=load_of(s), reps=s['reps'], date=record_date(r), record_id=r.get('id'))
+    return sorted(best.values(), key=lambda b: (str(b['side']), b['load'] == 'bw', -(b['load'] if b['load'] != 'bw' else 0)))
 
 
 def compare(latest, previous, records):
     c, p = latest.get('analysis_context') or {}, (previous or {}).get('analysis_context') or {}
     quality = c.get('quality_change')
-    reasons, status, delta = [], 'comparable', None
+    reasons, status = [], 'comparable'
+    result = dict(reps_delta=None, top_load_delta=None, top_set_reps_delta=None, days_since_previous=None)
     if previous is None:
         status, reasons = 'new_baseline', ['no_previous_base_match']
     else:
+        gap = (datetime.strptime(record_date(latest), '%Y-%m-%d') - datetime.strptime(record_date(previous), '%Y-%m-%d')).days
+        result['days_since_previous'] = gap
+        if gap > LONG_GAP_DAYS:
+            reasons.append('long_gap')
         for key in ('execution_standard', 'session_template'):
             if c.get(key) is not None and p.get(key) is not None and c[key] != p[key]:
                 status = 'new_baseline'
                 reasons.append(key + '_changed')
             elif not c.get(key) or not p.get(key):
                 reasons.append(key + '_unknown')
+        e = latest.get('equipment') or {}
+        su, sp = setup_values(latest), setup_values(previous)
+        if su is not None and sp is not None and su != sp:
+            status = 'new_baseline'
+            reasons.append('setup_changed')
+        elif (su is None or sp is None) and e.get('type') in ('machine', 'cable'):
+            reasons.append('setup_unknown')
         if latest.get('sequence') is None:
             reasons.append('sequence_unknown')
-        e = latest.get('equipment') or {}
         if not e.get('type') or (e.get('type') in ('machine', 'cable') and not e.get('name')):
             reasons.append('equipment_identity_unknown')
         if not (latest.get('variant') or {}).get('laterality'):
@@ -110,9 +231,15 @@ def compare(latest, previous, records):
         # Free text is evidence for the agent, not a safe automatic classifier.
         if latest.get('notes') or previous.get('notes'):
             reasons.append('notes_require_review')
-        a, b = work_sets(latest), work_sets(previous)
+        a, b = primary_sets(latest), primary_sets(previous)
         if not a or not b or any(s.get('rir') is None for s in a+b):
             reasons.append('effort_unknown')
+        elif sorted(s['rir'] for s in a) != sorted(s['rir'] for s in b) and len(a) == len(b):
+            reasons.append('effort_changed')
+        ta, tb = top_sets(latest), top_sets(previous)
+        if any(ta[k].get('failure_mode') and tb[k].get('failure_mode') and ta[k]['failure_mode'] != tb[k]['failure_mode']
+               for k in set(ta) & set(tb)):
+            reasons.append('failure_mode_changed')
         if any(s.get('reps') is None for s in a+b):
             reasons.append('rep_measurement_unavailable')
         if any(s.get('weight_kg') is None and not s.get('bodyweight') for s in a+b):
@@ -121,10 +248,11 @@ def compare(latest, previous, records):
             reasons.append('weight_basis_unknown')
         if any(s.get('bodyweight') for s in a+b):
             reasons.append('bodyweight_load_untracked')
-        if [[s.get(k) for k in SET_FIELDS] for s in a] != [[s.get(k) for k in SET_FIELDS] for s in b]:
-            reasons.append('set_conditions_changed')
+        if [(s.get('side'), load_of(s)) for s in a] != [(s.get('side'), load_of(s)) for s in b]:
+            reasons.append('set_structure_changed')
         if status == 'comparable' and reasons:
             status = 'limited'
+    blocking = [r for r in reasons if r in BLOCKING_REASONS]
     if quality in ('improved', 'improved_with_load_reduction'):
         status = 'new_baseline'
         reasons.append('reported_quality_improvement')
@@ -133,12 +261,18 @@ def compare(latest, previous, records):
         status = 'limited'
         reasons.append('reported_quality_decline')
         assessment = 'quality_declined'
-    elif status == 'comparable':
-        delta = set_metrics(latest)['reps']-set_metrics(previous)['reps']
-        assessment = 'reps_increased' if delta > 0 else ('reps_unchanged' if delta == 0 else 'reps_decreased')
+    elif status == 'new_baseline':
+        assessment = 'establish_baseline'
+    elif blocking:
+        assessment = 'review_context'
     else:
-        assessment = 'establish_baseline' if status == 'new_baseline' else 'review_context'
-    return dict(comparability=status, reasons=reasons, assessment=assessment, reps_delta=delta)
+        result.update(performance(latest, previous))
+        assessment = result.pop('assessment')
+        # A lower number may be an unrecorded technique change; never present it as regression without explicit quality.
+        if quality != 'maintained' and (assessment == 'load_decreased' or
+                                        ('notes_require_review' in reasons and assessment.endswith('decreased'))):
+            assessment = 'review_context'
+    return dict(comparability=status, reasons=reasons, blocking_reasons=blocking, assessment=assessment, **result)
 
 
 def build_report(records, catalog, date):
@@ -182,21 +316,24 @@ def build_report(records, catalog, date):
                             muscles=muscle_rows))
     groups = {}
     for r in eligible:
-        key = json.dumps(base_key(r), ensure_ascii=False)
+        key = json.dumps(base_key(r, sequence_role(r, eligible, catalog_map)), ensure_ascii=False)
         groups.setdefault(key, []).append(r)
     trends = []
-    for rs in groups.values():
+    for key, rs in groups.items():
         latest = rs[-1]
         if record_date(latest) < windows[1]['start']:
             continue
         previous = rs[-2] if len(rs) > 1 else None
-        trends.append(dict(exercise_id=latest['exercise_id'], base_key=base_key(latest),
+        trends.append(dict(exercise_id=latest['exercise_id'], base_key=json.loads(key),
                            history=[snapshot(r) for r in rs[-3:][::-1]],
+                           best_reps_by_load=best_reps_by_load(rs),
                            **compare(latest, previous, eligible)))
     trends.sort(key=lambda t: (t['exercise_id'], str(t['history'][0]['id'])))
     last_date = record_date(eligible[-1]) if eligible else None
     return dict(as_of=date, last_workout_date=last_date,
                 days_since_last_workout=(end-datetime.strptime(last_date, '%Y-%m-%d').date()).days if last_date else None,
                 windows=windows, trends=trends,
-                guidance='Descriptive only; review quality, recovery and historical notes before changing the plan. No automatic PR, overload or deload.',
-                counting_basis='Catalog primary_muscles only; overlapping muscles are not additive. Unpaired rounds remain visible; unknown rounds are not imputed.')
+                guidance='Descriptive only; review quality, recovery and historical notes before changing the plan. No automatic PR, overload or deload. '
+                         'Limited comparisons still show numbers; read every reason as a caveat.',
+                counting_basis='Catalog primary_muscles only; overlapping muscles are not additive. Unpaired rounds remain visible; unknown rounds are not imputed. '
+                               'Back-off, drop, rest-pause and myo sets count as working set entries; trends use straight/top sets only.')
