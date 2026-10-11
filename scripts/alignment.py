@@ -32,19 +32,24 @@ def set_field(record, key, value):
         record.setdefault(path[0], {})[path[1]] = value
 
 
-def default_weight_basis(record, preference):
-    """User rule (2026-10-11): bilateral loads of the listed equipment types are two-side totals."""
+def default_weight_basis(record, preference, catalog_type=None):
+    """User rule (2026-10-11): basis follows the equipment type, whatever the laterality.
+
+    machines (plate- or pin-loaded), cables and barbells are totals; dumbbells are per dumbbell.
+    A record without a type uses the catalog type when every listed option maps to one basis.
+    """
     if not isinstance(preference, dict) or preference.get('status') != 'user_confirmed':
         return None
     if record.get('weight_basis') not in (None, 'unknown'):
         return None
-    if get(record, ('variant', 'laterality')) != preference.get('laterality'):
-        return None
-    if get(record, ('equipment', 'type')) not in (preference.get('equipment_types') or ()):
-        return None
     if not any(s.get('weight_kg') is not None for s in record.get('sets') or []):
         return None
-    return preference.get('value')
+    mapping = preference.get('by_equipment_type') or {}
+    etype = get(record, ('equipment', 'type'))
+    if etype is not None:
+        return mapping.get(etype)
+    options = {mapping.get(t) for t in (catalog_type or '').split('_or_')} if catalog_type else {None}
+    return options.pop() if len(options) == 1 else None
 
 
 def compatible(target, peer):

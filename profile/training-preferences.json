@@ -30,10 +30,15 @@
       "confirmed_on": "2026-10-11"
     },
     "weight_basis_default": {
-      "laterality": "bilateral",
-      "equipment_types": ["machine", "cable", "barbell"],
-      "value": "total",
-      "meaning": "不区分左右手的双侧动作，重量固定按两侧合计记录，不再询问。哑铃动作沿用此前已确认的每只哑铃口径，不在此规则内；左右分别记录的单侧动作仍需确认口径。",
+      "by_equipment_type": {
+        "machine": "total",
+        "cable": "total",
+        "barbell": "total",
+        "dumbbell": "per_implement"
+      },
+      "applies_to_laterality": "all",
+      "meaning": "重量口径按器械类型固定，不论是否分左右手，不再询问：挂片器械记挂片总重，插片器械（含钢线/龙门架配重片）记总重，杠铃记总重，哑铃记单只重量。用户当次明确说明其他口径时以用户为准。",
+      "history": "2026-10-11 先确认双侧动作记两侧合计；同日扩展为按器械类型，覆盖单侧动作与哑铃；用户确认钢线/龙门架配重属于插片。",
       "status": "user_confirmed",
       "confirmed_on": "2026-10-11"
     },

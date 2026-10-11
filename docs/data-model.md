@@ -126,8 +126,8 @@
 }
 ```
 
-- 只出现在被补全的记录中，键为 `equipment.name`、`equipment.type`、`variant.angle`、`variant.posture`、`variant.grip`、`variant.laterality`、`weight_basis`。`weight_basis` 只按用户规则 `weight_basis_default` 补全（双侧器械、钢线、杠铃记 `total`），方法为 `convention`。`value` 必须等于记录当前值，`validate` 会检查。
-- `method`：`history_reported_name`（同一叫法历史中最常用值）、`history_equipment`（同一器械历史中唯一值）、`history_exercise`（同一动作历史中唯一值）、`name_unified`（用户给出的器械名被唯一一个更常用的历史名包含；`original` 保存原名）、`convention`（未说明左右默认双侧；或双侧器械、钢线、杠铃按用户规则记两侧合计）。`support` 为支持该值的历史记录数。
+- 只出现在被补全的记录中，键为 `equipment.name`、`equipment.type`、`variant.angle`、`variant.posture`、`variant.grip`、`variant.laterality`、`weight_basis`。`weight_basis` 只按用户规则 `weight_basis_default` 补全（按器械类型：器械、钢线、杠铃记 `total`，哑铃记 `per_implement`，与单双侧无关），方法为 `convention`。`value` 必须等于记录当前值，`validate` 会检查。
+- `method`：`history_reported_name`（同一叫法历史中最常用值）、`history_equipment`（同一器械历史中唯一值）、`history_exercise`（同一动作历史中唯一值）、`name_unified`（用户给出的器械名被唯一一个更常用的历史名包含；`original` 保存原名）、`convention`（未说明左右默认双侧；或按用户规则由器械类型确定重量口径）。`support` 为支持该值的历史记录数。
 - 这是按用户规则得出的推定，不是用户当次原话；需要撤销时，按 `original` 恢复并删去对应键。
 
 ## 器械设置（可选）

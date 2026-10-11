@@ -75,8 +75,7 @@
 - 窄距、宽距、对握等会影响可比性的握法写入 `variant.grip`，不要只留在自由文本中。
 - 未说明单位的配重默认 kg，但在回报中明确这一假设。
 - 已确认的重量口径使用 `weight_basis`（单只、每侧、合计或器械标示）保存；不同口径分开统计，未知口径不猜测。
-- 用户规则（2026-10-11，见 profile 的 `recording_preferences.weight_basis_default`）：不区分左右手的双侧器械、钢线和杠铃动作，重量固定按两侧合计（`total`）记录，不再询问。`add` 在口径省略或为 `unknown` 时自动应用，并在 `inferred_fields.weight_basis` 标明 `convention`；用户明确说明其他口径时以用户为准。哑铃动作沿用此前确认的每只哑铃口径，左右分别记录的单侧动作仍按下一条确认。
-- 单侧器械若用户只报一个数字，不猜测这是“每侧”还是“总重”；需要确认，或把解释写进 `notes`。
+- 用户规则（2026-10-11，见 profile 的 `recording_preferences.weight_basis_default`）：重量口径按器械类型固定，不论是否分左右手，不再询问。挂片和插片器械（`machine`）、钢线/龙门架配重（`cable`，用户确认属于插片）、杠铃记总重 `total`；哑铃记单只 `per_implement`。`add` 在口径省略或为 `unknown` 时自动应用（器械类型可来自原话、历史补全或词典中只对应一种口径的类型），并在 `inferred_fields.weight_basis` 标明 `convention`；用户当次明确说明其他口径时以用户为准。器械类型无法确定时口径保持 `unknown`，不猜测。
 - 热身组通过 `--warmup-count` 标记，不计入默认训练量统计。
 - 失败组可记录实际完成次数；额外语义写入 `notes`，不捏造 RIR。
 - 用户已确认所有工作组均练至力竭：未报告 RIR 时由脚本按 profile 默认记录 `rir=0` 并保留 `rir_source=profile_default`，不再询问或留空（2026-08-18 确认，见 `profile/training-preferences.json` 的 `recording_preferences.rir_default`）。

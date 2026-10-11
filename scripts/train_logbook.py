@@ -458,7 +458,7 @@ def command_add(args):
     if record['equipment']['type'] is None:
         record['equipment']['type'] = get_equipment_type(args.exercise, catalog_item.get("equipment_type"))
     # A stated concrete basis is kept; an unknown one follows the user's fixed rule, same as align.
-    basis = default_weight_basis(record, basis_rule)
+    basis = default_weight_basis(record, basis_rule, catalog_item.get("equipment_type"))
     if basis:
         record['weight_basis'] = basis
         record['inferred_fields'] = dict(record.get('inferred_fields') or {},
@@ -529,7 +529,7 @@ def read_preference(project_root, name):
         return json.load(f).get('recording_preferences', {}).get(name)
 
 
-def plan_alignment(records, skip_ids=(), basis_rule=None):
+def plan_alignment(records, skip_ids=(), basis_rule=None, catalog_types=None):
     """Per-record fills for historical nulls, using every other record as evidence."""
     plans = []
     for record in records:
@@ -543,7 +543,7 @@ def plan_alignment(records, skip_ids=(), basis_rule=None):
         projected = json.loads(json.dumps(record))
         for key, item in fills.items():
             set_field(projected, key, item['value'])
-        basis = default_weight_basis(projected, basis_rule)
+        basis = default_weight_basis(projected, basis_rule, (catalog_types or {}).get(record.get('exercise_id')))
         if basis:
             fills['weight_basis'] = dict(value=basis, method='convention', support=None, original=record.get('weight_basis'))
         if fills or ambiguous:
@@ -554,7 +554,8 @@ def plan_alignment(records, skip_ids=(), basis_rule=None):
 
 def command_align(args):
     records = read_workout_records(args.workout_root)
-    plans = plan_alignment(records, set(args.skip_id or []), read_preference(args.project_root, 'weight_basis_default'))
+    catalog_types = {i['id']: i.get('equipment_type') for i in read_catalog(args.catalog_path)['exercises']}
+    plans = plan_alignment(records, set(args.skip_id or []), read_preference(args.project_root, 'weight_basis_default'), catalog_types)
     applied = 0
     if args.apply:
         by_id = {p['id']: p for p in plans if p['fills']}
@@ -906,7 +907,7 @@ def build_parser():
         p.add_argument("--date", dest="date", default=None, help="训练日期 yyyy-MM-dd")
         p.add_argument('--performed-at', dest='performed_at', default=None, help='用户报告的实际训练时间（带时区，可选）')
         p.add_argument('--weight-basis', dest='weight_basis', choices=WEIGHT_BASES, default=None,
-                       help='已确认重量口径；省略或 unknown 时，双侧器械/钢线/杠铃按 profile 规则记两侧合计')
+                       help='已确认重量口径；省略或 unknown 时按 profile 规则：器械/钢线/杠铃记总重，哑铃记单只')
         p.add_argument("--equipment", dest="equipment", default=None, help="具体器械")
         p.add_argument("--angle", dest="angle", default=None, help="flat/incline/decline/vertical")
         p.add_argument("--posture", dest="posture", default=None, help="seated/standing/lying/kneeling")

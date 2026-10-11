@@ -127,7 +127,7 @@ class TrainLogbookTests(unittest.TestCase):
             root, run = self.fixture(d)
             self.add(run,date='2026-09-03',weight_basis='per_implement')
             self.add(run,date='2026-09-04',weight_basis='total')
-            self.add(run,date='2026-09-05',exercise='哑铃卧推')
+            self.add(run,date='2026-09-05',exercise='侧平举')
             rows=run('stats')
             self.assertEqual({r['weight_basis'] for r in rows},{'per_implement','total','unknown'})
             self.assertTrue(all(r['volume_kg']==400 for r in rows))
@@ -224,16 +224,25 @@ class TrainLogbookTests(unittest.TestCase):
             self.assertEqual(r['equipment']['name'], '诺德士')
             self.assertEqual(run('validate')['status'], 'ok')
 
-    def test_bilateral_weight_basis_defaults_to_total(self):
+    def test_weight_basis_follows_equipment_type(self):
         with tempfile.TemporaryDirectory() as d:
             root, run = self.fixture(d)
             r = self.add(run, sequence='1')
             self.assertEqual((r['weight_basis'], r['inferred_fields']['weight_basis']['method']), ('total', 'convention'))
             self.assertEqual(self.add(run, sequence='2', weight_basis='unknown')['weight_basis'], 'total')
             self.assertEqual(self.add(run, sequence='3', weight_basis='per_side')['weight_basis'], 'per_side')
-            self.assertEqual(self.add(run, sequence='4', exercise='哑铃侧平举', sets='10x8')['weight_basis'], 'unknown')
-            self.assertEqual(self.add(run, sequence='5', exercise='Y举', sets='R:8x20,L:8x20')['weight_basis'], 'unknown')
+            self.assertEqual(self.add(run, sequence='4', exercise='哑铃侧平举', sets='10x8')['weight_basis'], 'per_implement')
+            # Unilateral loads follow the equipment too: shared-plate machines and cables are totals.
+            self.assertEqual(self.add(run, sequence='5', exercise='Y举', sets='R:8x20,L:8x20')['weight_basis'], 'total')
+            self.assertEqual(self.add(run, sequence='7', exercise='豪斯特二头弯举', resolve_as='肱二头弯举', sets='R:10x80,L:10x80')['weight_basis'], 'total')
+            self.assertEqual(self.add(run, sequence='8', exercise='单臂哑铃划船', sets='R:10x30,L:10x30')['weight_basis'], 'per_implement')
             self.assertEqual(self.add(run, sequence='6', exercise='引体向上', sets='10xbw')['weight_basis'], 'unknown')
+            # Without a type in history, the name, or an unambiguous catalog type: left unknown.
+            self.assertEqual(self.add(run, sequence='9', exercise='肩推', sets='10x40')['weight_basis'], 'unknown')
+            # History-inferred type drives the basis: the earlier dumbbell lateral raise makes this per dumbbell.
+            self.assertEqual(self.add(run, sequence='11', exercise='侧平举', sets='10x8')['weight_basis'], 'per_implement')
+            # Catalog type cable_or_machine maps to a single basis.
+            self.assertEqual(self.add(run, sequence='10', exercise='高位下拉', sets='10x60')['weight_basis'], 'total')
             # align applies the same rule to history, but never overrides a stated basis.
             path = next(root.rglob('*.jsonl'))
             rows = [json.loads(l) for l in path.read_text().splitlines()]
