@@ -60,9 +60,17 @@
     "meaning": "没有训练记录的日期按休息日处理；不额外创建空训练日志。",
     "status": "user_preference"
   },
+  "training_split": {
+    "current": "push_pull",
+    "meaning": "自 2026-08-13 起实际以推日、拉日交替为主：推日以胸为核心，拉日以背为核心；三角肌、手臂和斜方肌动作按当天安排灵活插入。不规定固定动作清单，分析以实际记录为准。",
+    "status": "user_confirmed",
+    "confirmed_on": "2026-10-11"
+  },
   "priority_rotation": {
     "chest_back_day": {
-      "enabled": true,
+      "enabled": false,
+      "disabled_on": "2026-10-11",
+      "disabled_reason": "用户确认停用：实际训练已改为推/拉分化，胸背同日只出现在 2026-08-05、08-08、08-11。以下模板与轮换状态保留为历史；恢复胸背同日时由用户重新确认后再启用。",
       "strategy": "alternate_first_muscle_group",
       "last_completed_priority": "back",
       "next_priority": "chest",

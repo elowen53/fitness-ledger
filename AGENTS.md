@@ -98,7 +98,7 @@
 - 当原始叫法含品牌或临时描述、但动作身份已由上下文唯一确认时，使用 `add --exercise <原话> --resolve-as <规范动作名>`；这样既保留 `reported_name`，也不污染别名。
 - 若新动作无法归入现有 `exercise_id`，添加稳定的英文 snake_case ID、中文规范名、动作模式、主要肌群、器械类型、别名及支持的变体。
 - 自定义动作不要求存在国际通用英文名。ID 只需稳定、可读；不要为了显得标准而编造“官方名称”。
-- `primary_muscles` 使用现有英文肌群词汇；常用值包括 `front_delts`、`side_delts`、`rear_delts`、`chest`、`lats`、`back`、`biceps`、`triceps`、`quads`、`hamstrings`、`glutes`。无法准确映射时先询问，不自行提升解剖精度。
+- `primary_muscles` 使用现有英文肌群词汇；常用值包括 `front_delts`、`side_delts`、`rear_delts`、`chest`、`lats`、`back`、`traps`、`biceps`、`triceps`、`quads`、`hamstrings`、`glutes`。`traps`（斜方肌）于 2026-10-11 按用户确认加入：耸肩记 `traps`，Kelso 耸肩记 `traps` + `back`。无法准确映射时先询问，不自行提升解剖精度。
 - 不因拼写差异或中英文差异创建重复动作。
 
 ## 数据安全
@@ -116,9 +116,9 @@
 - 展示训练日、复盘表现和寻找可比历史时，按 `sequence` 排序；`performed_at` 只表示记录中的时间戳，不能替代训练顺序。
 - 同一天的 `sequence` 不得重复。用户未提供顺序时才询问，不按动作类别自行重排。
 - 设计顺序前读取 `knowledge/exercise-order.md`。当前结论是：先做动作通常有利于该动作的力量发展，但没有可靠证据显示顺序会显著改变肌肉肥大。
-- 胸背日按 `profile/training-preferences.json` 的证据化模板轮换优先肌群。轮换状态（`last_completed_priority` / `next_priority`）以 profile 为准，本文件不复制其值，避免过期。
+- 当前分化以 profile 的 `training_split` 为准（2026-10-11 用户确认：推/拉交替）。胸背同日轮换（`priority_rotation.chest_back_day`）已停用，模板与轮换状态仅作历史；设计训练时不按它推进顺序，用户恢复胸背同日并确认后才重新启用。
 - 比较进步时必须匹配顺序角色；胸部优先日不直接与背部优先日的同动作表现判定进步或退步。
-- 只有训练实际完成后才更新 `last_completed_priority` 和 `next_priority`；生成计划本身不推进轮换状态。
+- 轮换启用时，只有训练实际完成后才更新 `last_completed_priority` 和 `next_priority`；生成计划本身不推进轮换状态。
 
 ## 动作质量与渐进优先级
 

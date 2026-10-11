@@ -164,7 +164,7 @@
       "id": "overhead_press",
       "canonical_name": "过头推举",
       "movement_pattern": "vertical_push",
-      "primary_muscles": ["shoulders"],
+      "primary_muscles": ["front_delts"],
       "equipment_type": "free_weight_or_machine",
       "aliases": ["过头推举", "肩推", "推肩", "肩上推举", "overhead press", "shoulder press"],
       "supported_variants": {
@@ -297,7 +297,7 @@
       "id": "shrug",
       "canonical_name": "耸肩",
       "movement_pattern": "scapular_elevation",
-      "primary_muscles": ["back"],
+      "primary_muscles": ["traps"],
       "equipment_type": "free_weight_or_machine",
       "aliases": ["耸肩", "哑铃耸肩", "杠铃耸肩", "shrug", "dumbbell shrug", "barbell shrug"],
       "supported_variants": {
@@ -313,7 +313,7 @@
       "definition": "用户于2026-10-09确认：胸部靠在胸托上，手臂基本伸直，主要让肩胛骨前伸后缩；按用户定义，主要训练中下斜方肌，区别于屈肘划船及向上耸肩。",
       "target_basis": "user_confirmed",
       "movement_pattern": "scapular_retraction",
-      "primary_muscles": ["back"],
+      "primary_muscles": ["traps", "back"],
       "equipment_type": "machine",
       "aliases": [],
       "supported_variants": {
