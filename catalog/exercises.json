@@ -358,11 +358,11 @@
       "id": "user_y_raise",
       "canonical_name": "Y举",
       "naming_status": "user_defined",
-      "definition": "用户定义的单侧动作，主要训练意图为三角肌中束和后束；具体器械、姿势和轨迹尚未提供。",
+      "definition": "用户定义的龙门架钢线单侧动作，主要训练意图为三角肌中束和后束；2026-10-11 用户确认所有 Y举均使用龙门架钢线。姿势和轨迹尚未提供。",
       "target_basis": "user_confirmed",
       "movement_pattern": "user_defined",
       "primary_muscles": ["side_delts", "rear_delts"],
-      "equipment_type": "unspecified",
+      "equipment_type": "cable",
       "aliases": [],
       "supported_variants": {
         "angle": [],
