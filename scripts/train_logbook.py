@@ -21,7 +21,7 @@ import uuid
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime
-from alignment import infer
+from alignment import default_weight_basis, infer, set_field
 from analysis import build_report, context_errors, QUALITY_CHANGES, record_date, sequence_role, weight_basis
 from validation import record_errors, WEIGHT_BASES, number, valid_date, valid_timestamp
 
@@ -396,6 +396,7 @@ def command_add(args):
         raise SystemExit('需要大于 0 的 --sequence。')
 
     default = None
+    basis_rule = read_preference(args.project_root, 'weight_basis_default')
     profile_path = os.path.join(args.project_root, 'profile', 'training-preferences.json')
     if os.path.exists(profile_path):
         with open(profile_path, encoding='utf-8-sig') as f:
@@ -422,7 +423,7 @@ def command_add(args):
         "training_date": training_date,
         "recorded_at": iso7(now),
         "performed_at": args.performed_at,
-        "weight_basis": args.weight_basis,
+        "weight_basis": args.weight_basis or "unknown",
         "day_type": args.day_type,
         "day_type_basis": args.day_type_basis,
         "sequence": args.sequence if args.sequence and args.sequence > 0 else None,
@@ -451,12 +452,17 @@ def command_add(args):
             raise SystemExit('以下字段无法从历史唯一补全，先向用户确认，或显式传参/--no-infer：\n' + '\n'.join(
                 '%s: %s' % (k, '，'.join('%s×%d' % kv for kv in v.items())) for k, v in ambiguous.items()))
         for key, item in fills.items():
-            group, field = key.split('.')
-            record[group][field] = item['value']
+            set_field(record, key, item['value'])
         if fills:
             record['inferred_fields'] = fills
     if record['equipment']['type'] is None:
         record['equipment']['type'] = get_equipment_type(args.exercise, catalog_item.get("equipment_type"))
+    # A stated concrete basis is kept; an unknown one follows the user's fixed rule, same as align.
+    basis = default_weight_basis(record, basis_rule)
+    if basis:
+        record['weight_basis'] = basis
+        record['inferred_fields'] = dict(record.get('inferred_fields') or {},
+                                         weight_basis=dict(value=basis, method='convention', support=None, original=None))
     for field in ('angle', 'posture'):
         assert_variant_allowed(catalog_item, field, record['variant'][field])
     if used_default:
@@ -515,7 +521,15 @@ def last_setup_record(records, exercise_id, equipment, before_date=None):
 # Command: align
 # ---------------------------------------------------------------------------
 
-def plan_alignment(records, skip_ids=()):
+def read_preference(project_root, name):
+    path = os.path.join(project_root, 'profile', 'training-preferences.json')
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding='utf-8-sig') as f:
+        return json.load(f).get('recording_preferences', {}).get(name)
+
+
+def plan_alignment(records, skip_ids=(), basis_rule=None):
     """Per-record fills for historical nulls, using every other record as evidence."""
     plans = []
     for record in records:
@@ -526,6 +540,12 @@ def plan_alignment(records, skip_ids=()):
         variant = record.get('variant') or {}
         if variant.get('laterality') is None and not any(s.get('side') for s in record.get('sets') or []):
             fills['variant.laterality'] = dict(value='bilateral', method='convention', support=None, original=None)
+        projected = json.loads(json.dumps(record))
+        for key, item in fills.items():
+            set_field(projected, key, item['value'])
+        basis = default_weight_basis(projected, basis_rule)
+        if basis:
+            fills['weight_basis'] = dict(value=basis, method='convention', support=None, original=record.get('weight_basis'))
         if fills or ambiguous:
             plans.append(dict(id=record.get('id'), date=record_date(record), exercise_id=record.get('exercise_id'),
                               reported_name=record.get('reported_name'), fills=fills, ambiguous=ambiguous))
@@ -534,7 +554,7 @@ def plan_alignment(records, skip_ids=()):
 
 def command_align(args):
     records = read_workout_records(args.workout_root)
-    plans = plan_alignment(records, set(args.skip_id or []))
+    plans = plan_alignment(records, set(args.skip_id or []), read_preference(args.project_root, 'weight_basis_default'))
     applied = 0
     if args.apply:
         by_id = {p['id']: p for p in plans if p['fills']}
@@ -543,8 +563,7 @@ def command_align(args):
             if not plan:
                 continue
             for key, item in plan['fills'].items():
-                group, field = key.split('.')
-                record.setdefault(group, {})[field] = item['value']
+                set_field(record, key, item['value'])
             record['inferred_fields'] = dict(record.get('inferred_fields') or {}, **plan['fills'])
         errors = record_errors(records, read_catalog(args.catalog_path))
         if errors:
@@ -886,7 +905,8 @@ def build_parser():
         p.add_argument("--sets", dest="sets", nargs="+", default=None, help="组,如 12x40@2")
         p.add_argument("--date", dest="date", default=None, help="训练日期 yyyy-MM-dd")
         p.add_argument('--performed-at', dest='performed_at', default=None, help='用户报告的实际训练时间（带时区，可选）')
-        p.add_argument('--weight-basis', dest='weight_basis', choices=WEIGHT_BASES, default='unknown', help='已确认重量口径')
+        p.add_argument('--weight-basis', dest='weight_basis', choices=WEIGHT_BASES, default=None,
+                       help='已确认重量口径；省略或 unknown 时，双侧器械/钢线/杠铃按 profile 规则记两侧合计')
         p.add_argument("--equipment", dest="equipment", default=None, help="具体器械")
         p.add_argument("--angle", dest="angle", default=None, help="flat/incline/decline/vertical")
         p.add_argument("--posture", dest="posture", default=None, help="seated/standing/lying/kneeling")

@@ -19,7 +19,32 @@ def norm(text):
 
 
 def get(record, path):
+    if len(path) == 1:
+        return record.get(path[0])
     return (record.get(path[0]) or {}).get(path[1])
+
+
+def set_field(record, key, value):
+    path = key.split('.')
+    if len(path) == 1:
+        record[key] = value
+    else:
+        record.setdefault(path[0], {})[path[1]] = value
+
+
+def default_weight_basis(record, preference):
+    """User rule (2026-10-11): bilateral loads of the listed equipment types are two-side totals."""
+    if not isinstance(preference, dict) or preference.get('status') != 'user_confirmed':
+        return None
+    if record.get('weight_basis') not in (None, 'unknown'):
+        return None
+    if get(record, ('variant', 'laterality')) != preference.get('laterality'):
+        return None
+    if get(record, ('equipment', 'type')) not in (preference.get('equipment_types') or ()):
+        return None
+    if not any(s.get('weight_kg') is not None for s in record.get('sets') or []):
+        return None
+    return preference.get('value')
 
 
 def compatible(target, peer):
@@ -101,7 +126,7 @@ def inferred_errors(record):
     if not isinstance(data, dict) or not data:
         return ['inferred_fields must be a nonempty object']
     errors = []
-    allowed = {'.'.join(p) for p in FILL_FIELDS} | {'variant.laterality'}
+    allowed = {'.'.join(p) for p in FILL_FIELDS} | {'variant.laterality', 'weight_basis'}
     for key, item in data.items():
         if key not in allowed or not isinstance(item, dict):
             errors.append('invalid inferred_fields.' + str(key))

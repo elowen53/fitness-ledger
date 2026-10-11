@@ -29,6 +29,14 @@
       "status": "user_confirmed",
       "confirmed_on": "2026-10-11"
     },
+    "weight_basis_default": {
+      "laterality": "bilateral",
+      "equipment_types": ["machine", "cable", "barbell"],
+      "value": "total",
+      "meaning": "不区分左右手的双侧动作，重量固定按两侧合计记录，不再询问。哑铃动作沿用此前已确认的每只哑铃口径，不在此规则内；左右分别记录的单侧动作仍需确认口径。",
+      "status": "user_confirmed",
+      "confirmed_on": "2026-10-11"
+    },
     "rir_default": {
       "missing_means": 0,
       "meaning": "用户确认所有工作组均为力竭；未报告 RIR 时默认按 0 记录，不再询问。",

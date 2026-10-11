@@ -91,6 +91,7 @@
 | 用户报告的器械设置（可选） | `--setup 座椅=4 靠垫=2` |
 | 用户确认与上次设置相同（可选） | `--setup-same-as-last` |
 | 不按历史补全器械/变体 | `--no-infer` |
+| 重量口径（省略时双侧器械/钢线/杠铃记两侧合计） | `--weight-basis` |
 | JSON 输出 | `--json` |
 
 `--day-type` 允许 `standard`、`overload`、`deload`。训练日类型的判定规则与 `overload_lever` 记录方式见 `knowledge/training-day-types.md`。

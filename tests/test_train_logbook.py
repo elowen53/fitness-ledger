@@ -127,11 +127,12 @@ class TrainLogbookTests(unittest.TestCase):
             root, run = self.fixture(d)
             self.add(run,date='2026-09-03',weight_basis='per_implement')
             self.add(run,date='2026-09-04',weight_basis='total')
-            self.add(run,date='2026-09-05')
+            self.add(run,date='2026-09-05',exercise='哑铃卧推')
             rows=run('stats')
             self.assertEqual({r['weight_basis'] for r in rows},{'per_implement','total','unknown'})
             self.assertTrue(all(r['volume_kg']==400 for r in rows))
             self.assertEqual(len(run('report','--date','2026-09-05')['trends']),3)
+            self.assertEqual(len([r for r in rows if r['exercise_id']=='machine_chest_press']),2)
 
     def test_legacy_compatibility_and_failed_correction(self):
         with tempfile.TemporaryDirectory() as d:
@@ -205,7 +206,7 @@ class TrainLogbookTests(unittest.TestCase):
             self.assertEqual(r['inferred_fields']['equipment.name']['method'], 'history_reported_name')
             r = run('add', '--exercise', '蝴蝶机夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-04', '--no-infer')
             self.assertIsNone(r['equipment']['name'])
-            self.assertNotIn('inferred_fields', r)
+            self.assertNotIn('equipment.name', r.get('inferred_fields', {}))
             # A stated name contained in one more frequent historical name is unified.
             r = run('add', '--exercise', '夹胸', '--sets', '10x59', '--sequence', '1', '--date', '2026-09-05', '--equipment', '蝴蝶')
             self.assertEqual(r['inferred_fields']['equipment.name'], dict(value='蝴蝶机', method='name_unified', support=3, original='蝴蝶'))
@@ -221,6 +222,28 @@ class TrainLogbookTests(unittest.TestCase):
             self.assertEqual(before, self.files(root))
             r = run('add', '--exercise', '器械推胸', '--sets', '10x80', '--sequence', '2', '--date', '2026-09-05', '--equipment', '诺德士')
             self.assertEqual(r['equipment']['name'], '诺德士')
+            self.assertEqual(run('validate')['status'], 'ok')
+
+    def test_bilateral_weight_basis_defaults_to_total(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            r = self.add(run, sequence='1')
+            self.assertEqual((r['weight_basis'], r['inferred_fields']['weight_basis']['method']), ('total', 'convention'))
+            self.assertEqual(self.add(run, sequence='2', weight_basis='unknown')['weight_basis'], 'total')
+            self.assertEqual(self.add(run, sequence='3', weight_basis='per_side')['weight_basis'], 'per_side')
+            self.assertEqual(self.add(run, sequence='4', exercise='哑铃侧平举', sets='10x8')['weight_basis'], 'unknown')
+            self.assertEqual(self.add(run, sequence='5', exercise='Y举', sets='R:8x20,L:8x20')['weight_basis'], 'unknown')
+            self.assertEqual(self.add(run, sequence='6', exercise='引体向上', sets='10xbw')['weight_basis'], 'unknown')
+            # align applies the same rule to history, but never overrides a stated basis.
+            path = next(root.rglob('*.jsonl'))
+            rows = [json.loads(l) for l in path.read_text().splitlines()]
+            rows[0]['weight_basis'] = 'unknown'
+            rows[0].pop('inferred_fields')
+            path.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+            plans = run('align')['plans']
+            self.assertEqual([(p['id'], set(p['fills'])) for p in plans], [(r['id'], {'weight_basis'})])
+            self.assertEqual(run('align', '--apply')['applied'], 1)
+            self.assertEqual(json.loads(path.read_text().splitlines()[0])['weight_basis'], 'total')
             self.assertEqual(run('validate')['status'], 'ok')
 
     def test_align_backfills_history_with_provenance(self):
