@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from alignment import default_weight_basis, infer, set_field
 from analysis import build_report, context_errors, QUALITY_CHANGES, record_date, sequence_role, weight_basis
-from validation import record_errors, WEIGHT_BASES, number, valid_date, valid_timestamp
+from validation import record_errors, same_equipment, WEIGHT_BASES, number, valid_date, valid_timestamp
 
 
 # ---------------------------------------------------------------------------
@@ -627,14 +627,6 @@ def command_align(args):
         for key, counts in p['ambiguous'].items():
             print('  待确认 %s: %s' % (key, '，'.join('%s×%d' % kv for kv in counts.items())))
     print('已写入 %d 条记录。' % applied if args.apply else '预览模式，未修改账本；确认后加 --apply。')
-
-
-def same_equipment(a, b):
-    """Same named equipment; a missing type on either side does not separate them."""
-    a, b = a or {}, b or {}
-    if a.get('name') != b.get('name'):
-        return False
-    return a.get('type') is None or b.get('type') is None or a.get('type') == b.get('type')
 
 
 # ---------------------------------------------------------------------------

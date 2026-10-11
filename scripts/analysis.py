@@ -329,20 +329,39 @@ def compare(latest, previous, records, periods=()):
     return dict(comparability=status, reasons=reasons, blocking_reasons=blocking, assessment=assessment, **result)
 
 
-def lever_achieved(lever, comparison, latest, previous):
-    """Did the stated lever move in the comparable data? None when it cannot be judged."""
+GOOD_QUALITY = ('maintained', 'improved', 'improved_with_load_reduction')
+
+
+def quality_of(record):
+    return (record.get('analysis_context') or {}).get('quality_change')
+
+
+def lever_moved(lever, comparison, latest, previous):
+    """Did the stated lever's number go up in comparable data? None when it cannot be judged."""
     if previous is None or comparison['comparability'] == 'new_baseline' or comparison['blocking_reasons']:
         return None
-    if lever == 'reps':
-        if comparison['assessment'] in ('reps_increased', 'top_set_reps_increased'):
-            return True
-        return False if comparison['assessment'] in ('reps_unchanged', 'reps_decreased', 'top_set_reps_unchanged',
-                                                      'top_set_reps_decreased') else None
-    if lever == 'load':
-        return comparison['top_load_delta'] > 0 if comparison['top_load_delta'] is not None else None
     if lever == 'sets':
         return len(primary_sets(latest)) > len(primary_sets(previous))
-    return None  # density needs rest data
+    if lever == 'density':
+        return None  # needs rest data
+    # Computed directly: a reported quality decline must not hide whether the number moved.
+    p = performance(latest, previous)
+    if lever == 'load':
+        return p['top_load_delta'] > 0 if p['top_load_delta'] is not None else None
+    if p['assessment'] in ('reps_increased', 'top_set_reps_increased'):
+        return True
+    return False if p['assessment'] in ('reps_unchanged', 'reps_decreased', 'top_set_reps_unchanged',
+                                         'top_set_reps_decreased', 'top_set_reps_mixed') else None
+
+
+def target_effective(moved, latest):
+    """User rule quality > quantity > load: a number only counts when quality held or improved."""
+    if moved is not True:
+        return moved
+    quality = quality_of(latest)
+    if quality in GOOD_QUALITY:
+        return True
+    return False if quality == 'degraded' else None
 
 
 def next_target(group, comparison, phase):
@@ -351,20 +370,27 @@ def next_target(group, comparison, phase):
     tops = top_sets(latest)
     if not tops or any(s.get('weight_kg') is None for s in tops.values()):
         return None
-    quality = (latest.get('analysis_context') or {}).get('quality_change')
     load = {k or 'bilateral': s['weight_kg'] for k, s in tops.items()}
     reps = {k or 'bilateral': s['reps'] for k, s in tops.items()}
-    if quality == 'degraded':
-        return dict(kind='restore_quality', load=load, reps_goal=reps, note='先恢复动作质量，重量和次数复现即可')
+    hold = lambda kind, note: dict(kind=kind, load=load, reps_goal=reps, note=note)
+    if quality_of(latest) == 'degraded':
+        return hold('restore_quality', '先恢复动作质量，重量和次数复现即可')
     if 'crosses_layoff' in comparison['reasons'] or (phase and phase['active'] and record_date(latest) > phase['layoff']['end']):
-        return dict(kind='rebuild_baseline', load=load, reps_goal=reps, note='复训期：复现本次重量和次数，不追加')
-    previous_tops = top_sets(group[-2]) if len(group) > 1 and comparison['comparability'] != 'new_baseline' else {}
-    ready = all(s['reps'] >= REP_CEILING for s in tops.values()) and previous_tops and all(
+        return hold('rebuild_baseline', '复训期：复现本次重量和次数，不追加')
+    if comparison['comparability'] == 'new_baseline' and comparison['reasons'] != ['no_previous_base_match']:
+        return hold('confirm_baseline', '新做法/新设置的基线：先复现一次再推进')
+    if comparison['blocking_reasons']:
+        return hold('review_context', '与上次不可直接比较（%s）：复现本次，不推进' % '、'.join(comparison['blocking_reasons']))
+    previous = group[-2] if len(group) > 1 and comparison['comparability'] != 'new_baseline' else None
+    previous_tops = top_sets(previous) if previous else {}
+    at_ceiling = bool(previous_tops) and all(s['reps'] >= REP_CEILING for s in tops.values()) and all(
         k in previous_tops and previous_tops[k].get('weight_kg') == tops[k]['weight_kg'] and previous_tops[k]['reps'] >= REP_CEILING
         for k in tops)
-    if ready:
-        return dict(kind='add_load', load=load, reps_goal=None,
-                    note='连续两次最重组达到 %d 次：加最小一档，次数允许回落' % REP_CEILING)
+    if at_ceiling:
+        if quality_of(latest) in GOOD_QUALITY and quality_of(previous) in GOOD_QUALITY:
+            return dict(kind='add_load', load=load, reps_goal=None,
+                        note='连续两次最重组达到 %d 次且质量保持：加最小一档，次数允许回落' % REP_CEILING)
+        return hold('confirm_quality', '连续两次最重组达到 %d 次，但质量未确认：确认质量保持后再加重' % REP_CEILING)
     return dict(kind='add_rep', load=load, reps_goal={k: v + 1 for k, v in reps.items()},
                 note='同重量，最重组多做 1 次')
 
@@ -422,11 +448,13 @@ def build_report(records, catalog, date, day_notes=None):
         previous = rs[-2] if len(rs) > 1 else None
         comparison = compare(latest, previous, eligible, periods)
         target = latest.get('progression_target')
+        moved = lever_moved(target['lever'], comparison, latest, previous) if target else None
         trends.append(dict(exercise_id=latest['exercise_id'], base_key=json.loads(key),
                            history=[snapshot(r) for r in rs[-3:][::-1]],
                            best_reps_by_load=best_reps_by_load(rs, periods),
                            progression_target=target,
-                           target_lever_achieved=lever_achieved(target['lever'], comparison, latest, previous) if target else None,
+                           target_lever_moved=moved,
+                           target_effective=target_effective(moved, latest),
                            next_target=next_target(rs, comparison, phase),
                            **comparison))
     trends.sort(key=lambda t: (t['exercise_id'], str(t['history'][0]['id'])))

@@ -318,6 +318,19 @@ class TrainLogbookTests(unittest.TestCase):
             run('add', '--exercise', '上斜推胸', '--resolve-as', '器械推胸', '--sets', '10x60', '--sequence', '4', '--date', '2026-09-04',
                 '--equipment', 'FORWARD', '--setup-same-as-last', ok=False)
 
+    def test_setup_carries_over_from_record_without_type(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            old = run('add', '--exercise', 'Y举', '--sets', 'R:8x20,L:8x20', '--sequence', '1', '--date', '2026-09-04',
+                      '--equipment', '龙门架钢线', '--setup', '滑轮=最低', '--no-infer')
+            path = next(root.rglob('2026-09-04.jsonl'))
+            path.write_text(json.dumps(dict(old, equipment=dict(old['equipment'], type=None)), ensure_ascii=False) + '\n')
+            self.assertEqual(run('setup', '--exercise', 'Y举', '--equipment', '龙门架钢线')['status'], 'found')
+            new = run('add', '--exercise', 'Y举', '--sets', 'R:8x20,L:8x20', '--sequence', '1', '--date', '2026-09-05',
+                      '--equipment', '龙门架钢线', '--setup-same-as-last')
+            self.assertEqual(new['setup']['from_record'], old['id'])
+            self.assertEqual(run('validate')['status'], 'ok')
+
     def test_shared_lock_does_not_get_stolen(self):
         with tempfile.TemporaryDirectory() as d:
             root,run=self.fixture(d)

@@ -10,6 +10,14 @@ WEIGHT_BASES = ('unknown', 'per_implement', 'per_side', 'total', 'machine_displa
 OVERLOAD_LEVERS = ('load', 'reps', 'sets', 'density')
 
 
+def same_equipment(a, b):
+    """Same named equipment; a missing type on either side does not separate them."""
+    a, b = a or {}, b or {}
+    if a.get('name') != b.get('name'):
+        return False
+    return a.get('type') is None or b.get('type') is None or a.get('type') == b.get('type')
+
+
 def number(value, minimum=0, integer=False):
     return (not isinstance(value, bool) and isinstance(value, (int, float))
             and math.isfinite(value) and value >= minimum
@@ -198,7 +206,7 @@ def record_errors(records, catalog):
         source = by_id.get(setup.get('from_record'))
         if (source is None or source is r or record_date(source) > record_date(r)
                 or source.get('exercise_id') != r.get('exercise_id')
-                or source.get('equipment') != r.get('equipment')
+                or not same_equipment(source.get('equipment'), r.get('equipment'))
                 or (source.get('variant') or {}).get('angle') != (r.get('variant') or {}).get('angle')
                 or (source.get('setup') or {}).get('values') != setup['values']):
             errors.append('%s: setup.from_record must be an earlier record of the same exercise and equipment with identical values' % rid)

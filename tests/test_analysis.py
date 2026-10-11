@@ -205,19 +205,51 @@ class AnalysisTests(unittest.TestCase):
         self.assertIsNone(t['progression_target'])
         b['progression_target'] = dict(lever='reps', target=None, basis='user_reported')
         t = self.report([a, b])['trends'][0]
-        self.assertTrue(t['target_lever_achieved'])  # 11 -> 12 on the same load profile
+        self.assertTrue(t['target_lever_moved'])  # 11 -> 12 on the same load profile
         b['sets'][0]['reps'], b['sets'][1]['reps'] = 11, 10
-        self.assertFalse(self.report([a, b])['trends'][0]['target_lever_achieved'])
+        self.assertFalse(self.report([a, b])['trends'][0]['target_lever_moved'])
         # Two sessions at the rep ceiling: add the smallest load step.
         t = self.report([record('2026-09-01', (12, 10)), record('2026-09-05', (12, 9))])['trends'][0]
         self.assertEqual(t['next_target']['kind'], 'add_load')
         b['progression_target']['lever'] = 'load'
-        self.assertFalse(self.report([a, b])['trends'][0]['target_lever_achieved'])
+        self.assertFalse(self.report([a, b])['trends'][0]['target_lever_moved'])
         b['analysis_context']['quality_change'] = 'degraded'
         self.assertEqual(self.report([a, b])['trends'][0]['next_target']['kind'], 'restore_quality')
         notes = [dict(date='2026-09-02', training_status='paused', applies_through='2026-09-04')]
         t = build_report([a, record('2026-09-05', (12, 11))], CATALOG, '2026-09-05', notes)['trends'][0]
-        self.assertEqual((t['next_target']['kind'], t['target_lever_achieved']), ('rebuild_baseline', None))
+        self.assertEqual((t['next_target']['kind'], t['target_lever_moved']), ('rebuild_baseline', None))
+
+    def test_next_target_respects_comparison_gates_and_quality(self):
+        def target(a, b):
+            return self.report([a, b])['trends'][0]['next_target']['kind']
+        a, b = record('2026-09-01', (12, 10)), record('2026-09-05', (12, 9))
+        self.assertEqual(target(a, b), 'add_load')  # both sessions quality maintained
+        # Unknown quality: hold the load until quality is confirmed.
+        for r in (a, b):
+            r['analysis_context'].pop('quality_change')
+        self.assertEqual(target(a, b), 'confirm_quality')
+        # Blocked comparison (rest 180 -> 60): no push at all.
+        a, b = record('2026-09-01', (12, 10)), record('2026-09-05', (12, 9))
+        b['analysis_context']['rest_sec'] = 60
+        self.assertEqual(target(a, b), 'review_context')
+        # A quality-driven new baseline is confirmed before adding reps.
+        a, b = record('2026-09-01', (10, 8)), record('2026-09-05', (12, 10), weight=30)
+        b['analysis_context']['quality_change'] = 'improved_with_load_reduction'
+        self.assertEqual(target(a, b), 'confirm_baseline')
+        # A first session may still aim for one more rep.
+        self.assertEqual(self.report([record('2026-09-05')])['trends'][0]['next_target']['kind'], 'add_rep')
+
+    def test_target_effective_requires_quality(self):
+        a, b = record('2026-09-01'), record('2026-09-05', (10, 8, 6))
+        b['progression_target'] = dict(lever='sets', target=None, basis='user_reported')
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual((t['target_lever_moved'], t['target_effective']), (True, True))
+        b['analysis_context']['quality_change'] = 'degraded'
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual((t['target_lever_moved'], t['target_effective']), (True, False))
+        b['analysis_context'].pop('quality_change')
+        t = self.report([a, b])['trends'][0]
+        self.assertEqual((t['target_lever_moved'], t['target_effective']), (True, None))
 
     def test_add_context_keeps_existing_recording_semantics(self):
         import shutil

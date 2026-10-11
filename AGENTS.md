@@ -135,5 +135,5 @@
 - 测试/PR 和技术练习不是肌肥大核心日类型；偶尔测试或练习时，用 `tags`/`notes` 记录目的。技术练习若同时是有意降压恢复，才标 `deload`。
 - `overload` 和 `deload` 是带意图的相对标签，不以单日重量或容量的偶然波动自动推定。必须保留可比的动作、变体、器械和顺序角色，并在 `day_type_basis` 或 `notes` 中说明依据。
 - 渐进超负荷优先按动作级判断：训练日可以只让一个或少数优先动作增加次数、负重或组数，其余动作维持基线即可；`day_type=overload` 不表示当天所有动作都必须进步。此“选择性推进”是项目启发式，不得表述为已被直接试验证明优于全动作推进。
-- `overload` 时由重点推进动作的 `progression_target.lever`（`load`/`reps`/`sets`/`density`）记录推进变量；同日其他动作省略 `--day-type` 即继承当天类型。`report` 的 `target_lever_achieved` 只在可比时判断该变量是否提高，`next_target` 是按双重渐进给出的下次建议，属于计划，不写入日志；`deload` 的核心是有意降低训练压力以减轻疲劳、促进恢复，没有统一适用于所有人的百分比。
+- `overload` 时由重点推进动作的 `progression_target.lever`（`load`/`reps`/`sets`/`density`）记录推进变量；同日其他动作省略 `--day-type` 即继承当天类型。`report` 的 `target_lever_moved` 只在可比时判断该变量的数字是否提高，`target_effective` 再按“质量优先”判断是否为有效推进（数字提高且质量确认保持或提高才为真，质量下降为假，质量未知为空）；`next_target` 是按双重渐进给出的下次建议，属于计划，不写入日志，比较被阻断、新基线或质量未确认时不建议推进；`deload` 的核心是有意降低训练压力以减轻疲劳、促进恢复，没有统一适用于所有人的百分比。
 - 容量和重量分开统计：总次数、工作组、`weight_kg × reps`、RIR/RPE；不同器械或变体不得直接比较 `volume_load` 或 PR。详细定义见 `knowledge/training-day-types.md`。
