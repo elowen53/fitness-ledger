@@ -147,10 +147,35 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(self.report([a, b])['trends'][0]['assessment'], 'review_context')
         b['analysis_context'] = dict(quality_change='maintained')
         self.assertEqual(self.report([a, b])['trends'][0]['assessment'], 'load_decreased')
+        # The exercise skipped for weeks while training continued: a caveat, not a layoff.
         b = record('2026-10-20', (12, 9))
-        t = self.report([a, b], '2026-10-20')['trends'][0]
+        others = [record('2026-09-%02d' % d, exercise_id='raise') for d in range(8, 31, 7)]
+        others += [record('2026-10-%02d' % d, exercise_id='raise') for d in (7, 14)]
+        t = next(t for t in self.report([a, b] + others, '2026-10-20')['trends'] if t['exercise_id'] == 'press')
         self.assertIn('long_gap', t['reasons'])
         self.assertEqual(t['days_since_previous'], 49)
+        self.assertNotEqual(t['comparability'], 'new_baseline')
+
+    def test_layoff_resets_baseline_and_reports_return_phase(self):
+        a, b, c = record('2026-08-24'), record('2026-10-08', (8, 6)), record('2026-10-12', (9, 7))
+        notes = [dict(date='2026-08-25', training_status='paused', applies_through='2026-09-04'),
+                 dict(date='2026-09-05', training_status='paused', applies_through='2026-10-07'),
+                 dict(date='2026-08-07', day_status='rest_day')]
+        r = build_report([a, b], CATALOG, '2026-10-09', notes)
+        self.assertEqual(r['layoffs'], [dict(start='2026-08-25', end='2026-10-07', sources=['day_note', 'training_gap'], days=44)])
+        self.assertEqual((r['return_phase']['first_session'], r['return_phase']['sessions_since_return'], r['return_phase']['active']),
+                         ('2026-10-08', 1, True))
+        t = r['trends'][0]
+        self.assertEqual((t['comparability'], t['assessment']), ('new_baseline', 'establish_baseline'))
+        self.assertIn('crosses_layoff', t['reasons'])
+        self.assertEqual((t['pre_layoff_reference']['reps_delta'], t['pre_layoff_reference']['previous_date']), (-4, '2026-08-24'))
+        self.assertTrue(next(x for x in t['best_reps_by_load'] if x['load'] == 40)['before_last_layoff'])
+        # Post-return sessions compare with each other again.
+        t = build_report([a, b, c], CATALOG, '2026-10-12', notes)['trends'][0]
+        self.assertEqual((t['assessment'], t['reps_delta']), ('reps_increased', 2))
+        self.assertFalse(build_report([a, b, c], CATALOG, '2026-10-30', notes)['return_phase']['active'])
+        # No layoff means no return phase.
+        self.assertEqual(build_report([a], CATALOG, '2026-08-24')['return_phase'], None)
 
     def test_set_types_failure_mode_and_setup(self):
         a, b = record('2026-09-01'), record('2026-09-05', (11,))
@@ -160,7 +185,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual((t['assessment'], t['top_set_reps_delta']), ('top_set_reps_increased', 1))
         self.assertEqual(r['windows'][0]['muscles'][0]['working_set_entries'], 4)
         self.assertEqual(r['windows'][0]['muscles'][0]['primary_set_entries'], 3)
-        self.assertEqual(t['best_reps_by_load'][0], dict(side=None, load=40, reps=11, date='2026-09-05', record_id='2026-09-05'))
+        self.assertEqual(t['best_reps_by_load'][0], dict(side=None, load=40, reps=11, date='2026-09-05', record_id='2026-09-05', before_last_layoff=False))
         a['sets'][0]['failure_mode'] = 'technical'
         b['sets'][0]['failure_mode'] = 'absolute'
         t = self.report([a, b])['trends'][0]

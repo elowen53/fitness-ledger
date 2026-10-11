@@ -134,6 +134,16 @@ def read_workout_records(workout_root=WORKOUT_ROOT):
     return records
 
 
+def read_day_notes(project_root):
+    notes = []
+    for dirpath, _, filenames in os.walk(os.path.join(project_root, 'data', 'day-notes')):
+        for filename in sorted(filenames):
+            if filename.endswith('.json'):
+                with open(os.path.join(dirpath, filename), encoding='utf-8-sig') as f:
+                    notes.append(json.load(f))
+    return notes
+
+
 def collect_history_names(records):
     historical = {}
     for record in records:
@@ -958,7 +968,7 @@ def main(argv=None):
     elif args.command == "report":
         try:
             result = build_report(read_workout_records(args.workout_root), read_catalog(args.catalog_path),
-                                  args.date or now_local().strftime('%Y-%m-%d'))
+                                  args.date or now_local().strftime('%Y-%m-%d'), read_day_notes(args.project_root))
         except ValueError as error:
             raise SystemExit(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=None if args.json else 2))

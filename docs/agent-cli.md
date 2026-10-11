@@ -115,7 +115,7 @@
 ./scripts/train-logbook.sh report --json
 ```
 
-`report` 支持截止日期、项目根目录和 JSON 输出，分析所有肌群。它不使用 `--exercise` 筛选，避免误把单动作组数当成整个肌群周剂量。默认两个窗口均包含截止日；候选趋势详见 `docs/data-model.md`。非 JSON 模式也输出缩进 JSON，供 Agent 读取后向用户用自然语言总结。
+`report` 支持截止日期、项目根目录和 JSON 输出，分析所有肌群，并读取 `data/day-notes/` 识别停训期（`layoffs`、`return_phase`）。它不使用 `--exercise` 筛选，避免误把单动作组数当成整个肌群周剂量。默认两个窗口均包含截止日；候选趋势详见 `docs/data-model.md`。非 JSON 模式也输出缩进 JSON，供 Agent 读取后向用户用自然语言总结。
 
 在现有 `add` 调用上，可选择增加 `--session-template "推日-A" --execution-standard "座椅4-全幅-v2" --quality-change maintained --rest-sec 180`。只保存已确认的实际信息，不将处方填成完成事实。质量状态完整枚举见数据模型。
 

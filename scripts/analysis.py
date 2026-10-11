@@ -14,6 +14,8 @@ SETUP_SOURCES = ('reported', 'same_as_previous')
 MUSCLE_REGIONS = {'lats': 'back', 'back': 'back', 'traps': 'back',
                   'front_delts': 'shoulders', 'side_delts': 'shoulders', 'rear_delts': 'shoulders', 'shoulders': 'shoulders'}
 LONG_GAP_DAYS = 21
+# Project heuristic: the first two weeks after a layoff re-establish baselines.
+RETURN_PHASE_DAYS = 14
 # Missing or differing context that makes a numeric verdict unsafe; other reasons are caveats.
 BLOCKING_REASONS = ('rest_changed', 'previous_quality_declined', 'effort_unknown', 'effort_changed',
                     'failure_mode_changed', 'rep_measurement_unavailable', 'load_unknown')
@@ -171,7 +173,7 @@ def performance(latest, previous):
     return dict(reps_delta=None, top_load_delta=load_delta, top_set_reps_delta=reps_out, assessment=assessment)
 
 
-def best_reps_by_load(group):
+def best_reps_by_load(group, periods=()):
     """Best single primary-set reps per side and load within one comparable key; not a PR claim."""
     best = {}
     for r in group:
@@ -180,11 +182,51 @@ def best_reps_by_load(group):
                 continue
             key = (s.get('side'), load_of(s))
             if key not in best or s['reps'] > best[key]['reps']:
-                best[key] = dict(side=s.get('side'), load=load_of(s), reps=s['reps'], date=record_date(r), record_id=r.get('id'))
+                best[key] = dict(side=s.get('side'), load=load_of(s), reps=s['reps'], date=record_date(r), record_id=r.get('id'),
+                                 before_last_layoff=bool(periods) and record_date(r) < periods[-1]['start'])
     return sorted(best.values(), key=lambda b: (str(b['side']), b['load'] == 'bw', -(b['load'] if b['load'] != 'bw' else 0)))
 
 
-def compare(latest, previous, records):
+def layoff_periods(records, day_notes, date):
+    """Paused ranges from day notes plus training gaps over LONG_GAP_DAYS, merged; only up to date."""
+    periods = []
+    for note in day_notes or []:
+        if note.get('training_status') == 'paused' and note.get('date') and note['date'] <= date:
+            periods.append([note['date'], min(note.get('applies_through') or note['date'], date), 'day_note'])
+    dates = sorted({record_date(r) for r in records if record_date(r) <= date})
+    day = lambda s: datetime.strptime(s, '%Y-%m-%d').date()
+    for a, b in zip(dates, dates[1:]):
+        if (day(b) - day(a)).days > LONG_GAP_DAYS:
+            periods.append([(day(a)+timedelta(days=1)).isoformat(), (day(b)-timedelta(days=1)).isoformat(), 'training_gap'])
+    periods.sort()
+    merged = []
+    for start, end, source in periods:
+        if merged and day(start) <= day(merged[-1]['end']) + timedelta(days=1):
+            last = merged[-1]
+            last['end'] = max(last['end'], end)
+            last['sources'] = sorted(set(last['sources']) | {source})
+        else:
+            merged.append(dict(start=start, end=end, sources=[source]))
+    for p in merged:
+        p['days'] = (day(p['end']) - day(p['start'])).days + 1
+    return merged
+
+
+def crossed_layoff(previous, latest, periods):
+    return next((p for p in periods if record_date(previous) < p['start'] and p['end'] < record_date(latest)), None)
+
+
+def return_phase(records, periods, date):
+    if not periods:
+        return None
+    p = periods[-1]
+    after = sorted({record_date(r) for r in records if p['end'] < record_date(r) <= date})
+    days = (datetime.strptime(date, '%Y-%m-%d') - datetime.strptime(p['end'], '%Y-%m-%d')).days
+    return dict(layoff=p, first_session=after[0] if after else None, sessions_since_return=len(after),
+                days_since_return=days, active=bool(after) and days <= RETURN_PHASE_DAYS)
+
+
+def compare(latest, previous, records, periods=()):
     c, p = latest.get('analysis_context') or {}, (previous or {}).get('analysis_context') or {}
     quality = c.get('quality_change')
     reasons, status = [], 'comparable'
@@ -194,7 +236,17 @@ def compare(latest, previous, records):
     else:
         gap = (datetime.strptime(record_date(latest), '%Y-%m-%d') - datetime.strptime(record_date(previous), '%Y-%m-%d')).days
         result['days_since_previous'] = gap
-        if gap > LONG_GAP_DAYS:
+        layoff = crossed_layoff(previous, latest, periods)
+        if layoff:
+            # Re-establish the baseline after a layoff; pre-layoff numbers stay as reference only.
+            status = 'new_baseline'
+            reasons.append('crosses_layoff')
+            reference = performance(latest, previous)
+            result['pre_layoff_reference'] = dict(previous_date=record_date(previous), layoff=layoff,
+                                                  top_load_delta=reference['top_load_delta'],
+                                                  top_set_reps_delta=reference['top_set_reps_delta'],
+                                                  reps_delta=reference['reps_delta'])
+        elif gap > LONG_GAP_DAYS:
             reasons.append('long_gap')
         for key in ('execution_standard', 'session_template'):
             if c.get(key) is not None and p.get(key) is not None and c[key] != p[key]:
@@ -275,7 +327,7 @@ def compare(latest, previous, records):
     return dict(comparability=status, reasons=reasons, blocking_reasons=blocking, assessment=assessment, **result)
 
 
-def build_report(records, catalog, date):
+def build_report(records, catalog, date, day_notes=None):
     end = datetime.strptime(date, '%Y-%m-%d').date()
     if end.isoformat() != date:
         raise ValueError('Date must be yyyy-MM-dd')
@@ -286,6 +338,7 @@ def build_report(records, catalog, date):
     eligible = [r for r in records if record_date(r) <= date]
     eligible.sort(key=lambda r: (record_date(r), r.get('sequence') or 0, r.get('id') or ''))
     catalog_map = {i['id']: i for i in catalog['exercises']}
+    periods = layoff_periods(eligible, day_notes, date)
     windows = []
     for days in (7, 14):
         start = (end-timedelta(days=days-1)).isoformat()
@@ -326,14 +379,16 @@ def build_report(records, catalog, date):
         previous = rs[-2] if len(rs) > 1 else None
         trends.append(dict(exercise_id=latest['exercise_id'], base_key=json.loads(key),
                            history=[snapshot(r) for r in rs[-3:][::-1]],
-                           best_reps_by_load=best_reps_by_load(rs),
-                           **compare(latest, previous, eligible)))
+                           best_reps_by_load=best_reps_by_load(rs, periods),
+                           **compare(latest, previous, eligible, periods)))
     trends.sort(key=lambda t: (t['exercise_id'], str(t['history'][0]['id'])))
     last_date = record_date(eligible[-1]) if eligible else None
     return dict(as_of=date, last_workout_date=last_date,
                 days_since_last_workout=(end-datetime.strptime(last_date, '%Y-%m-%d').date()).days if last_date else None,
+                layoffs=periods, return_phase=return_phase(eligible, periods, date),
                 windows=windows, trends=trends,
                 guidance='Descriptive only; review quality, recovery and historical notes before changing the plan. No automatic PR, overload or deload. '
-                         'Limited comparisons still show numbers; read every reason as a caveat.',
+                         'Limited comparisons still show numbers; read every reason as a caveat. '
+                'After a layoff, compare post-return sessions with each other; pre-layoff numbers are reference only.',
                 counting_basis='Catalog primary_muscles only; overlapping muscles are not additive. Unpaired rounds remain visible; unknown rounds are not imputed. '
                                'Back-off, drop, rest-pause and myo sets count as working set entries; trends use straight/top sets only.')
