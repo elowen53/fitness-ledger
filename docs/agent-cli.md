@@ -2,9 +2,21 @@
 
 本文档供 Agent 执行仓库任务时使用，不是面向最终用户的操作指南。行为约束以根目录 `AGENTS.md` 为准；本文只集中保存脚本接口和调用示例。
 
-## macOS 入口
+## 执行环境与入口
 
-使用 `./scripts/train-logbook.sh <command> ...`，由它调用 `scripts/train_logbook.py`。运行环境为 macOS、Bash 和 Python 3 标准库；可用 `PYTHON_BIN` 指定 Python 3 可执行文件。
+使用 `./scripts/train-logbook.sh <command> ...`，由它调用 `scripts/train_logbook.py`。macOS 原生运行，Windows 统一通过 WSL 运行 Git 命令、Shell 脚本和 Python 脚本，使用 WSL 内的 Linux Git、Bash 和 Python 3 标准库；不使用 Windows 原生 Git、Git Bash 或 Windows Python。可用 `PYTHON_BIN` 指定当前执行环境内的 Python 3 可执行文件，Windows 下不能指向 Windows Python。
+
+Windows 可从 PowerShell 调用 `wsl.exe`，先用 `--cd` 指定 WSL 仓库路径。例如 `D:\fitness` 对应 `/mnt/d/fitness`：
+
+```powershell
+wsl.exe --cd /mnt/d/fitness --exec git status --short --branch
+wsl.exe --cd /mnt/d/fitness --exec git pull --ff-only
+wsl.exe --cd /mnt/d/fitness --exec bash scripts/train-logbook.sh validate --json
+wsl.exe --cd /mnt/d/fitness --exec bash tests/smoke.sh
+wsl.exe --cd /mnt/d/fitness --exec python3 -m unittest discover -s tests -p 'test_*.py'
+```
+
+下文 Bash 示例均在 macOS 或 WSL 的仓库目录内执行。WSL 不可用时先排查并报告，不回退到 Windows 原生工具，也不维护另一套 Windows 脚本。
 
 命令：
 

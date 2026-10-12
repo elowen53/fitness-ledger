@@ -16,12 +16,19 @@
 1. 读取 `catalog/exercises.json`，或调用 `scripts/train-logbook.sh resolve --exercise <原始叫法> --json`。
 2. 将动作拆成：规范动作 `exercise_id`、变体、具体器械。不要为每个品牌或角度创建新的规范动作。
 3. 只有在结果唯一且语义合理时才写入。脚本返回 `ambiguous` 或 `unknown` 时，先向用户确认。
-4. 使用脚本写入，不要手工拼 JSONL。macOS 使用 `scripts/train-logbook.sh add`（调用 `scripts/train_logbook.py add`）。始终保留用户原话到 `reported_name`。
+4. 使用脚本写入，不要手工拼 JSONL。macOS 与 Windows 的 WSL 均使用 `scripts/train-logbook.sh add`（调用 `scripts/train_logbook.py add`）。始终保留用户原话到 `reported_name`。
 5. 严格按用户报告的先后顺序写入 `sequence`。即使某动作因等待确认而稍后补写，也必须保留它在原训练中的位置，不能使用落盘时间代替动作顺序。
 6. 写入后运行 `validate`（`scripts/train-logbook.sh validate`）。若本轮包含多条动作，全部完成后再运行一次即可。
 7. 简短回报日期、规范动作、变体、器械、顺序和组数；指出任何采用的假设。不要自动提交 Git，除非用户明确要求。
 
-> 平台说明：本仓库仅维护 macOS 环境，以 `scripts/train-logbook.sh` 为入口，使用 Python 3 标准库实现。新功能或规则变更必须通过 `bash tests/smoke.sh` 和 `python3 -m unittest discover -s tests -p 'test_*.py'` 验证。
+> 平台说明：本仓库维护统一的 Bash / Python 3 标准库实现，以 `scripts/train-logbook.sh` 为入口；macOS 原生执行，Windows 通过 WSL 执行。新功能或规则变更必须通过 `bash tests/smoke.sh` 和 `python3 -m unittest discover -s tests -p 'test_*.py'` 验证，Windows 下这两项检查也必须在 WSL 中运行。
+
+## Windows 执行环境（2026-10-12 用户确认）
+
+- Windows 下所有仓库 Git 命令、Shell 脚本和 Python 脚本统一在 WSL 中执行，使用 WSL 内的 Linux `git`、`bash` 和 `python3`，避免与 macOS 的执行约定冲突。
+- 不使用 Windows 原生 Git、Git Bash、PowerShell 执行 Shell 脚本，或 Windows Python / `py.exe` 运行项目脚本和测试。PowerShell 可用于调用 `wsl.exe`，文件读取与编辑不受此运行环境规则限制。
+- 在 WSL 中使用 Linux 路径；当前 Windows 仓库 `D:\fitness` 对应 `/mnt/d/fitness`。推荐调用形式为 `wsl.exe --cd /mnt/d/fitness --exec <命令及参数>`，具体示例见 `docs/agent-cli.md`。
+- 沿用现有脚本与测试入口，不另建 Windows 专用实现。WSL 无法执行时先排查并报告阻塞，不自行改用 Windows 原生 Git、Shell 或 Python。
 
 脚本命令、参数、组格式和常用调用示例集中记录在 `docs/agent-cli.md`。需要查询 CLI 用法时读取该文档，不要依赖面向用户的 `README.md`。
 
