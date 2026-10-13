@@ -87,7 +87,7 @@ def get_equipment_type(name, catalog_type):
         return "cable"
     if re.search(r"豪斯特|hoist", text, re.IGNORECASE):
         return "machine"
-    if re.search(r"器械|机器|推胸机|腿举机|machine", text, re.IGNORECASE):
+    if re.search(r"器械|机器|推胸机|腿举机|插片|挂片|杠片|machine", text, re.IGNORECASE):
         return "machine"
     if re.search(r"自重|bodyweight", text, re.IGNORECASE):
         return "bodyweight"

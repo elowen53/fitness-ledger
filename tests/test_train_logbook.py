@@ -331,6 +331,24 @@ class TrainLogbookTests(unittest.TestCase):
             self.assertEqual(new['setup']['from_record'], old['id'])
             self.assertEqual(run('validate')['status'], 'ok')
 
+    def test_new_variant_does_not_spread_to_plain_records(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            run('add', '--exercise', '坐姿哑铃侧平举', '--sets', '10x7', '--sequence', '1', '--date', '2026-09-01')
+            run('add', '--exercise', '坐姿哑铃侧平举', '--sets', '10x7', '--sequence', '1', '--date', '2026-09-02')
+            run('add', '--exercise', '哑铃坐姿侧平举（肱骨外旋）', '--resolve-as', '侧平举', '--grip', 'external_rotation',
+                '--sets', '8x7', '--sequence', '1', '--date', '2026-09-03')
+            r = run('add', '--exercise', '哑铃坐姿侧平举', '--sets', '10x7', '--sequence', '1', '--date', '2026-09-04')
+            self.assertIsNone(r['variant']['grip'])
+            self.assertNotIn('variant.grip', r.get('inferred_fields', {}))
+            self.assertEqual(run('align')['plans'], [])
+
+    def test_plate_and_pin_loaded_names_are_machines(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, run = self.fixture(d)
+            r = run('add', '--exercise', 'precor 坐姿插片侧平举', '--resolve-as', '侧平举', '--sets', '7x36', '--sequence', '1', '--date', '2026-09-05')
+            self.assertEqual((r['equipment']['type'], r['weight_basis']), ('machine', 'total'))
+
     def test_shared_lock_does_not_get_stolen(self):
         with tempfile.TemporaryDirectory() as d:
             root,run=self.fixture(d)

@@ -109,6 +109,11 @@ def infer(target, history):
             tiers.append(('history_equipment', peers, False))
         tiers.append(('history_exercise', peers, False))
         for method, rows, plurality in tiers:
+            if path[0] == 'variant' and method != 'history_reported_name' and rows \
+                    and any(get(r, path) is None for r in rows):
+                # An empty variant on comparable peers usually means the plain form: a one-off
+                # variant (e.g. external rotation) must not spread to plain records.
+                break
             result = decide([get(r, path) for r in rows], plurality)
             if result is None:
                 continue
