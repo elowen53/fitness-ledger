@@ -218,7 +218,7 @@
       "movement_pattern": "elbow_extension",
       "primary_muscles": ["triceps"],
       "equipment_type": "free_weight_or_cable",
-      "aliases": ["龙门架钢线过顶俯身臂屈伸", "单手哑铃过顶臂屈伸"],
+      "aliases": ["龙门架钢线过顶俯身臂屈伸", "龙门架钢线俯身过顶臂屈伸", "龙门架过顶臂屈伸", "钢线过顶臂屈伸", "俯身过顶臂屈伸", "过顶俯身臂屈伸", "过顶臂屈伸", "单手哑铃过顶臂屈伸"],
       "supported_variants": {
         "angle": ["vertical"],
         "posture": ["standing", "seated"],
