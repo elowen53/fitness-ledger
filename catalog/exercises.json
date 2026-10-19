@@ -370,6 +370,21 @@
       }
     },
     {
+      "id": "crunch",
+      "canonical_name": "卷腹",
+      "definition": "2026-10-19 用户确认：胸口向骨盆方向卷起，主要训练腹直肌。本次包含 HOIST 坐姿器械卷腹，以及脚远端固定、肩背离凳的下斜凳卷腹；器械和姿势分别记录，不与躯干基本坐起的仰卧起坐混同。",
+      "target_basis": "user_confirmed",
+      "movement_pattern": "trunk_flexion",
+      "primary_muscles": ["rectus_abdominis"],
+      "equipment_type": "bodyweight_or_machine",
+      "aliases": ["器械卷腹", "下斜凳卷腹"],
+      "supported_variants": {
+        "angle": ["decline"],
+        "posture": ["seated", "lying"],
+        "laterality": ["bilateral"]
+      }
+    },
+    {
       "id": "user_y_raise",
       "canonical_name": "Y举",
       "naming_status": "user_defined",
