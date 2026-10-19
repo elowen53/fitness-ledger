@@ -135,6 +135,21 @@
       }
     },
     {
+      "id": "leg_curl",
+      "canonical_name": "器械腿弯举",
+      "definition": "2026-10-19 用户确认本次坐姿腿弯举：坐着，将小腿向后下方弯回，主要训练腘绳肌群。姿势保存为变体，Precor 保存为器械品牌。",
+      "target_basis": "user_confirmed",
+      "movement_pattern": "knee_flexion",
+      "primary_muscles": ["hamstrings"],
+      "equipment_type": "machine",
+      "aliases": ["坐姿腿弯举"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["seated"],
+        "laterality": ["bilateral", "unilateral"]
+      }
+    },
+    {
       "id": "barbell_deadlift",
       "canonical_name": "杠铃硬拉",
       "movement_pattern": "hinge",
