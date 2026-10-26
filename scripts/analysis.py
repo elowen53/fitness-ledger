@@ -218,14 +218,24 @@ def crossed_layoff(previous, latest, periods):
     return next((p for p in periods if record_date(previous) < p['start'] and p['end'] < record_date(latest)), None)
 
 
-def return_phase(records, periods, date):
+def return_phase(records, periods, date, day_notes=None):
     if not periods:
         return None
     p = periods[-1]
     after = sorted({record_date(r) for r in records if p['end'] < record_date(r) <= date})
     days = (datetime.strptime(date, '%Y-%m-%d') - datetime.strptime(p['end'], '%Y-%m-%d')).days
-    return dict(layoff=p, first_session=after[0] if after else None, sessions_since_return=len(after),
-                days_since_return=days, active=bool(after) and days <= RETURN_PHASE_DAYS)
+    result = dict(layoff=p, first_session=after[0] if after else None, sessions_since_return=len(after),
+                  days_since_return=days, active=bool(after) and days <= RETURN_PHASE_DAYS)
+    # A reported phase takes precedence over the calendar heuristic, without erasing the layoff.
+    confirmations = [n for n in day_notes or []
+                     if n.get('training_phase') == 'enhancement' and n.get('status_basis') == 'user_reported'
+                     and n.get('date') and p['end'] < n['date'] <= date
+                     and (not n.get('applies_through') or date <= n['applies_through'])]
+    if confirmations:
+        note = max(confirmations, key=lambda n: n['date'])
+        result.update(active=False, training_phase='enhancement', phase_basis='user_reported',
+                      phase_confirmed_on=note['date'])
+    return result
 
 
 def compare(latest, previous, records, periods=()):
@@ -407,7 +417,7 @@ def build_report(records, catalog, date, day_notes=None):
     eligible.sort(key=lambda r: (record_date(r), r.get('sequence') or 0, r.get('id') or ''))
     catalog_map = {i['id']: i for i in catalog['exercises']}
     periods = layoff_periods(eligible, day_notes, date)
-    phase = return_phase(eligible, periods, date)
+    phase = return_phase(eligible, periods, date, day_notes)
     windows = []
     for days in (7, 14):
         start = (end-timedelta(days=days-1)).isoformat()

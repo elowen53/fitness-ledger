@@ -122,6 +122,20 @@
       }
     },
     {
+      "id": "bulgarian_split_squat",
+      "canonical_name": "保加利亚单腿蹲",
+      "definition": "保加利亚单腿蹲；2026-10-26 补录 2026-10-24 训练时，用户确认本次只用自重，左右腿分别记录。",
+      "movement_pattern": "squat",
+      "primary_muscles": ["quads", "glutes"],
+      "equipment_type": "bodyweight_or_free_weight",
+      "aliases": ["保加利亚单腿蹲"],
+      "supported_variants": {
+        "angle": [],
+        "posture": ["standing"],
+        "laterality": ["unilateral"]
+      }
+    },
+    {
       "id": "leg_press",
       "canonical_name": "腿举",
       "movement_pattern": "squat",

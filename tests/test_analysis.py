@@ -177,6 +177,35 @@ class AnalysisTests(unittest.TestCase):
         # No layoff means no return phase.
         self.assertEqual(build_report([a], CATALOG, '2026-08-24')['return_phase'], None)
 
+    def test_confirmed_enhancement_overrides_return_heuristic(self):
+        a = record('2026-08-24')
+        b, c = record('2026-10-15', (9, 7)), record('2026-10-19', (10, 7))
+        note = dict(date='2026-10-19', training_phase='enhancement', status_basis='user_reported')
+        rows, notes = [a, b, c], [note]
+        before = copy.deepcopy((rows, notes))
+        r = build_report(rows, CATALOG, '2026-10-19', notes)
+        self.assertFalse(r['return_phase']['active'])
+        self.assertEqual((r['return_phase']['training_phase'], r['return_phase']['phase_basis'],
+                          r['return_phase']['phase_confirmed_on']),
+                         ('enhancement', 'user_reported', '2026-10-19'))
+        self.assertEqual(r['trends'][0]['next_target']['kind'], 'add_rep')
+        self.assertEqual((rows, notes), before, 'phase override mutated facts')
+        # A future, expired, or unconfirmed note must not override the heuristic.
+        for changes in (dict(date='2026-10-20'), dict(applies_through='2026-10-18'),
+                        dict(status_basis='inferred')):
+            ignored = dict(note, **changes)
+            self.assertTrue(build_report(rows, CATALOG, '2026-10-19', [ignored])['return_phase']['active'])
+        # The confirmation is not applied to reports for earlier dates.
+        self.assertTrue(build_report(rows, CATALOG, '2026-10-18', notes)['return_phase']['active'])
+        # Completing the return phase never makes pre-layoff records directly comparable.
+        r = build_report([a, c], CATALOG, '2026-10-19', notes)
+        self.assertFalse(r['return_phase']['active'])
+        self.assertIn('crosses_layoff', r['trends'][0]['reasons'])
+        self.assertEqual(r['trends'][0]['next_target']['kind'], 'rebuild_baseline')
+        # A later layoff invalidates the old phase confirmation.
+        d = record('2026-11-20')
+        self.assertTrue(build_report(rows + [d], CATALOG, '2026-11-20', notes)['return_phase']['active'])
+
     def test_set_types_failure_mode_and_setup(self):
         a, b = record('2026-09-01'), record('2026-09-05', (11,))
         b['sets'].append(dict(reps=15, weight_kg=25, rir=0, warmup=False, bodyweight=False, side=None, round=None, set_type='backoff'))

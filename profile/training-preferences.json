@@ -69,6 +69,14 @@
       "do_not_infer_from_load_drop_alone": true,
       "status": "user_confirmed",
       "confirmed_on": "2026-08-24"
+    },
+    "double_progression": {
+      "route": ["同重量多做次数", "稳定达标", "加重", "再积累次数"],
+      "meaning": "在动作质量保持或提高、动作上下文可比的前提下，先在同重量下积累次数，稳定达到所用次数目标后再增加重量，并在新重量下重新积累次数。后续计划按此个人推进路线安排。",
+      "reported_text": "同重量多做次数 → 稳定达标 → 加重 → 再积累次数。是的这是我的推进路线",
+      "scope": "用户确认的是推进路线；具体次数上限、稳定达标所需次数和加重幅度继续按动作与项目启发式制定，不将其视为本次另行确认的固定阈值。",
+      "status": "user_confirmed",
+      "confirmed_on": "2026-10-20"
     }
   },
   "exercise_order": {

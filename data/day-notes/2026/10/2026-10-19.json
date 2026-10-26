@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-19",
+  "training_phase": "enhancement",
+  "status_basis": "user_reported",
+  "reported_on": "2026-10-19",
+  "reported_text": "已经不是恢复期了，已经是增强期",
+  "notes": "用户确认当前已处于增强期，结束自动复训期标记。此日期是确认日期，实际转入增强期的日期未提供，不回填更早日期；既有停训区间和训练事实保留。"
+}
